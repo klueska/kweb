@@ -10,12 +10,16 @@ void request_queue_init(struct request_queue *q, int request_size)
   q->qstats.size = 0;
   q->qstats.size_sum = 0;
   q->qstats.total_enqueued = 0;
+  q->qstats.total_dequeued = 0;
+  q->qstats.wait_time_sum = 0;
 
   SIMPLEQ_INIT(&q->zombie_queue);
   spinlock_init(&q->zombie_lock);
   q->zombie_qstats.size = 0;
   q->zombie_qstats.size_sum = 0;
   q->zombie_qstats.total_enqueued = 0;
+  q->zombie_qstats.total_dequeued = 0;
+  q->zombie_qstats.wait_time_sum = 0;
 }
 
 void *request_queue_create_request(struct request_queue *q)
@@ -23,8 +27,11 @@ void *request_queue_create_request(struct request_queue *q)
   spinlock_lock(&q->zombie_lock);
   struct request *r = SIMPLEQ_FIRST(&q->zombie_queue);
   if(r) {
-    q->zombie_qstats.size--;
     SIMPLEQ_REMOVE_HEAD(&q->zombie_queue, link);
+    r->dequeue_time = read_tsc();
+    q->zombie_qstats.total_dequeued++;
+    q->zombie_qstats.wait_time_sum += (r->dequeue_time - r->enqueue_time);
+    q->zombie_qstats.size--;
   }
   spinlock_unlock(&q->zombie_lock);
 
@@ -32,6 +39,8 @@ void *request_queue_create_request(struct request_queue *q)
     r = malloc(q->request_size);
   }
   r->id = 0;
+  r->enqueue_time = 0;
+  r->dequeue_time = 0;
   return r;
 }
 
@@ -39,7 +48,8 @@ void request_queue_destroy_request(struct request_queue *q, struct request *r)
 {
   spinlock_lock(&q->zombie_lock);
   q->zombie_qstats.size_sum += q->zombie_qstats.size++;
-  q->zombie_qstats.total_enqueued++;
+  r->id = q->zombie_qstats.total_enqueued++;
+  r->enqueue_time = read_tsc();
   SIMPLEQ_INSERT_HEAD(&q->zombie_queue, r, link);
   spinlock_unlock(&q->zombie_lock);
 }
@@ -49,6 +59,7 @@ void request_queue_enqueue_request(struct request_queue *q, struct request *r)
   spinlock_lock(&q->lock);
   q->qstats.size_sum += q->qstats.size++;
   r->id = q->qstats.total_enqueued++;
+  r->enqueue_time = read_tsc();
   SIMPLEQ_INSERT_TAIL(&q->queue, r, link);
   spinlock_unlock(&q->lock);
 }
@@ -58,8 +69,11 @@ struct request *request_queue_dequeue_request(struct request_queue *q)
   spinlock_lock(&q->lock);
   struct request *r = SIMPLEQ_FIRST(&q->queue);
   if(r) {
-    q->qstats.size--;
     SIMPLEQ_REMOVE_HEAD(&q->queue, link);
+    r->dequeue_time = read_tsc();
+    q->qstats.total_dequeued++;
+    q->qstats.wait_time_sum += (r->dequeue_time - r->enqueue_time);
+    q->qstats.size--;
   }
   spinlock_unlock(&q->lock);
   return r;
@@ -87,6 +101,14 @@ int request_queue_get_total_enqueued(struct request_queue_stats *prev,
   return curr->total_enqueued - prev->total_enqueued; 
 }
 
+double request_queue_get_average_wait_time(struct request_queue_stats *prev,
+                                           struct request_queue_stats *curr)
+{
+  double wait_time_sum = curr->wait_time_sum - prev->wait_time_sum;
+  uint64_t total_dequeued = curr->total_dequeued - prev->total_dequeued;
+  return wait_time_sum/total_dequeued;
+}
+
 void request_queue_print_total_enqueued(struct request_queue_stats *prev,
                                         struct request_queue_stats *curr)
 {
@@ -99,5 +121,12 @@ void request_queue_print_average_size(struct request_queue_stats *prev,
 {
   double average = request_queue_get_average_size(prev, curr);
   printf("Average request queue length: %lf\n", average);
+}
+
+void request_queue_print_average_wait_time(struct request_queue_stats *prev,
+                                           struct request_queue_stats *curr)
+{
+  double average = request_queue_get_average_wait_time(prev, curr);
+  printf("Average wait time in request queue: %lf\n", average);
 }
 

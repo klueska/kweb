@@ -3,16 +3,21 @@
 
 #include <sys/queue.h>
 #include "spinlock.h"
+#include "tsc.h"
 
 struct request {
   SIMPLEQ_ENTRY(request) link;
   int id;
+  uint64_t enqueue_time;
+  uint64_t dequeue_time;
 };
 
 struct request_queue_stats {
   int size;
   double size_sum;
   int total_enqueued;
+  int total_dequeued;
+  double wait_time_sum;
 };
 
 SIMPLEQ_HEAD(__request_queue, request);
@@ -39,9 +44,13 @@ int request_queue_get_total_enqueued(struct request_queue_stats *prev,
                                      struct request_queue_stats *curr);
 double request_queue_get_average_size(struct request_queue_stats *prev,
                                       struct request_queue_stats *curr);
+double request_queue_get_average_wait_time(struct request_queue_stats *prev,
+                                           struct request_queue_stats *curr);
 void request_queue_print_total_enqueued(struct request_queue_stats *prev,
                                         struct request_queue_stats *curr);
 void request_queue_print_average_size(struct request_queue_stats *prev,
                                       struct request_queue_stats *curr);
+void request_queue_print_average_wait_time(struct request_queue_stats *prev,
+                                           struct request_queue_stats *curr);
 
 #endif // REQUEST_QUEUE_H

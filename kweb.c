@@ -349,6 +349,7 @@ static void print_statistics(struct request_queue_stats *rqprev,
   request_queue_print_total_enqueued(rqprev, rqcurr);
   tpool_print_requests_processed(tpprev, tpcurr);
   request_queue_print_average_size(rqprev, rqcurr);
+  request_queue_print_average_wait_time(rqprev, rqcurr);
   cpu_util_print_average_load(cuprev, cucurr);
 }
 
