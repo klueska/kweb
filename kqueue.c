@@ -5,6 +5,7 @@
 void kqueue_init(struct kqueue *q, int item_size)
 {
   q->item_size = item_size;
+  q->ids = 0;
 
   SIMPLEQ_INIT(&q->queue);
   spinlock_init(&q->lock);
@@ -39,7 +40,7 @@ void *kqueue_create_item(struct kqueue *q)
   if(r == NULL) {
     r = malloc(q->item_size);
   }
-  r->id = 0;
+  r->id = q->ids++;
   r->enqueue_time = 0;
   r->dequeue_time = 0;
   return r;
@@ -49,7 +50,7 @@ void kqueue_destroy_item(struct kqueue *q, struct kitem *r)
 {
   spinlock_lock(&q->zombie_lock);
   q->zombie_qstats.size_sum += q->zombie_qstats.size++;
-  r->id = q->zombie_qstats.total_enqueued++;
+  q->zombie_qstats.total_enqueued++;
   r->enqueue_time = read_tsc();
   SIMPLEQ_INSERT_HEAD(&q->zombie_queue, r, link);
   spinlock_unlock(&q->zombie_lock);
@@ -59,7 +60,7 @@ void kqueue_enqueue_item(struct kqueue *q, struct kitem *r)
 {
   spinlock_lock(&q->lock);
   q->qstats.size_sum += q->qstats.size++;
-  r->id = q->qstats.total_enqueued++;
+  q->qstats.total_enqueued++;
   r->enqueue_time = read_tsc();
   SIMPLEQ_INSERT_TAIL(&q->queue, r, link);
   spinlock_unlock(&q->lock);
