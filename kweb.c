@@ -149,10 +149,13 @@ static int intercept_url(char *url)
 {
   if(!strncmp(url, "/start_timer", 12)) {
     ktimer_start(&ktimer);
+    return 1;
   }
   if(!strncmp(url, "/stop_timer", 11)) {
     ktimer_stop(&ktimer);
+    return 1;
   }
+  return 0;
 }
 
 /* This is a child web server thread */
@@ -188,15 +191,6 @@ void http_server(struct request_queue *q, struct request *__r)
   }
   logger(LOG, "Request", request_line, r->req.id);
 
-  /* Strip all query data and the version info from the request_line */
-  for(i=4; i<strlen(request_line); i++) {
-    /* String is "GET URL?<query_data> HTTP_VERSION" */
-    if(request_line[i] == ' ' || request_line[i] == '?') {
-      request_line[i] = '\0';
-      break;
-    }
-  }
-
   /* Intercept certain urls and do something special. */
   if(intercept_url(&request_line[4])) {
     /* Send the necessary header info + a blank line */
@@ -206,6 +200,15 @@ void http_server(struct request_queue *q, struct request *__r)
 
     reenqueue_or_complete(q, r);
     return;
+  }
+
+  /* Strip all query data and the version info from the request_line */
+  for(i=4; i<strlen(request_line); i++) {
+    /* String is "GET URL?<query_data> HTTP_VERSION" */
+    if(request_line[i] == ' ' || request_line[i] == '?') {
+      request_line[i] = '\0';
+      break;
+    }
   }
 
   /* Otherwise, check for illegal parent directory use .. */
