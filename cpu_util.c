@@ -8,7 +8,7 @@
 #include <limits.h>
 #include "cpu_util.h"
 
-static int __set_cpu_time(struct cpu_util *c)
+static int __set_cpu_time(struct cpu_util *c, struct cpu_util_stats *s)
 {
   int res = 0;
   char *saveptr;
@@ -27,12 +27,12 @@ static int __set_cpu_time(struct cpu_util *c)
       time += atof(field);
       field = strtok_r(NULL, " ", &saveptr);
     }
-    c->stats.cpu_time = time;
+    s->cpu_time = time;
   }
   return res;
 }
 
-static int __set_proc_time(struct cpu_util *c)
+static int __set_proc_time(struct cpu_util *c, struct cpu_util_stats *s)
 {
   int res = 0;
   char *saveptr;
@@ -47,20 +47,11 @@ static int __set_proc_time(struct cpu_util *c)
     char *field = strtok_r(c->buffer, " ", &saveptr);
     for(int i=1; i<14; i++)
       field = strtok_r(NULL, " ", &saveptr);
-    c->stats.proc_user_time = atof(field);
+    s->proc_user_time = atof(field);
     field = strtok_r(NULL, " ", &saveptr);
-    c->stats.proc_sys_time = atof(field);
+    s->proc_sys_time = atof(field);
   }
   return res;
-}
-
-static void __cpu_util_update(struct cpu_util *c)
-{
-  __set_cpu_time(c);
-  __set_proc_time(c);
-  c->stats.cpu_time -= c->stats.initial_cpu_time;
-  c->stats.proc_user_time -= c->stats.initial_proc_user_time;
-  c->stats.proc_sys_time -= c->stats.initial_proc_sys_time;
 }
 
 void cpu_util_init(struct cpu_util *c)
@@ -71,16 +62,8 @@ void cpu_util_init(struct cpu_util *c)
   c->proc_stat_fd = open(proc_stat_file, O_RDONLY);
   memset(c->buffer, 0, sizeof(c->buffer));
   spinlock_init(&c->lock);
-
-  __set_cpu_time(c);
-  __set_proc_time(c);
-  c->stats.initial_cpu_time = c->stats.cpu_time;
-  c->stats.initial_proc_user_time = c->stats.proc_user_time;
-  c->stats.initial_proc_sys_time = c->stats.proc_sys_time;
-
-  c->stats.cpu_time = 0.0;
-  c->stats.proc_user_time = 0.0;
-  c->stats.proc_sys_time = 0.0;
+  __set_cpu_time(c, &c->initial_stats);
+  __set_proc_time(c, &c->initial_stats);
 }
 
 void cpu_util_fini(struct cpu_util *c)
@@ -91,9 +74,13 @@ void cpu_util_fini(struct cpu_util *c)
 
 struct cpu_util_stats cpu_util_get_stats(struct cpu_util *c)
 {
+  struct cpu_util_stats s;
   spinlock_lock(&c->lock);
-  __cpu_util_update(c);
-  struct cpu_util_stats s = c->stats;
+  __set_cpu_time(c, &s);
+  __set_proc_time(c, &s);
+  s.cpu_time -= c->initial_stats.cpu_time;
+  s.proc_user_time -= c->initial_stats.proc_user_time;
+  s.proc_sys_time -= c->initial_stats.proc_sys_time;
   spinlock_unlock(&c->lock);
   return s;
 }
