@@ -136,6 +136,21 @@ static long buffer_next_or_finish(struct http_request *r)
   return ret;
 }
 
+int intercept_url(char *url, struct http_request *r)
+{
+  if(!strncmp(url, "/start_timer", 12)) {
+    ktimer_start(&ktimer);
+  }
+  if(!strncmp(url, "/stop_timer", 11)) {
+    ktimer_stop(&ktimer);
+  }
+
+  /* Send the necessary header info + a blank line */
+  sprintf(r->obuf, page_data[OK_HEADER], VERSION, 0, "text/plain");
+  logger(LOG, "INTERCEPT URL", url, r->req.id);
+  write(r->socketfd, r->obuf, strlen(r->obuf));
+}
+
 /* This is a child web server thread */
 void http_server(struct request_queue *q, struct request *__r)
 {
@@ -178,7 +193,18 @@ void http_server(struct request_queue *q, struct request *__r)
     }
   }
 
-  /* Check for illegal parent directory use .. */
+  /* Intercept certain urls and do something special. */
+  if(intercept_url(&request_line[4], r)) {
+    if(buffer_next_or_finish(r) > 0) {
+      request_queue_enqueue_request(q, &r->req);
+    }
+    else {
+      request_queue_destroy_request(q, &r->req);
+    }
+    return;
+  }
+
+  /* Otherwise, check for illegal parent directory use .. */
   for(j=4; j<i-1; j++) {
     if(request_line[j] == '.' && request_line[j+1] == '.') {
       logger(FORBIDDEN, "Parent directory (..) path names not supported", request_line, r->socketfd);
@@ -191,11 +217,6 @@ void http_server(struct request_queue *q, struct request *__r)
   /* Convert no filename to index file */
   if(!strncmp(request_line, "GET /\0", 6) || !strncmp(request_line, "get /\0", 6))
     strcpy(request_line, "GET /index.html");
-
-  /* Check to see if the file is named /terminate.html.
-   * If so, kill the webserver and print some statistics */
-  if(!strncmp(&request_line[4], "/terminate.html", 15))
-    sig_int(SIGINT);
 
   /* Work out the file type and check we support it */
   buflen=strlen(request_line);
@@ -369,7 +390,6 @@ int main(int argc, char **argv)
   tpool_init(&tpool, tpool_size, &request_queue, http_server);
   cpu_util_init(&cpu_util);
   ktimer_init(&ktimer, 1000, ktimer_callback, NULL);
-  ktimer_start(&ktimer);
 
   length = sizeof(cli_addr);
   for(;;) {
