@@ -373,6 +373,8 @@ int main(int argc, char **argv)
       r = request_queue_create_request(&request_queue);
       r->state = REQ_NEW;
       r->socketfd = socketfd;
+      r->req_length = 0;
+      r->ibuf_length = 0;
       if(tpool_size == 0)
         http_server(&request_queue, &r->req);
       else {
