@@ -32,7 +32,8 @@ static struct tpool_stats tpstats_curr = {0};
 static struct cpu_util_stats custats_prev = {0};
 static struct cpu_util_stats custats_curr = {0};
 
-static void sig_exit(int signo);
+static void sig_int(int signo);
+static void sig_pipe(int signo);
 static void ktimer_callback(void *arg);
 static void print_interval_statistics();
 static void print_lifetime_statistics();
@@ -190,7 +191,7 @@ void http_server(struct request_queue *q, struct request *__r)
   /* Check to see if the file is named /terminate.html.
    * If so, kill the webserver and print some statistics */
   if(!strncmp(&request_line[4], "/terminate.html", 15))
-    sig_exit(SIGINT);
+    sig_int(SIGINT);
 
   /* Work out the file type and check we support it */
   buflen=strlen(request_line);
@@ -231,7 +232,12 @@ void http_server(struct request_queue *q, struct request *__r)
 
   /* Send the file itself in 8KB chunks - last block may be smaller */
   while((ret = read(file_fd, r->obuf, sizeof(r->obuf))) > 0) {
-    write(r->socketfd, r->obuf, ret);
+    if(write(r->socketfd, r->obuf, ret) < 0) {
+      logger(LOG, "Write error on socket.", "", r->socketfd);
+      close(file_fd);
+      close(r->socketfd);
+      return;
+    }
   }
   close(file_fd);
 
@@ -339,8 +345,15 @@ int main(int argc, char **argv)
 
   /* Register a signal handler so we can print out some statistics once we kill
    * the server */
-  if(signal(SIGINT, sig_exit) == SIG_ERR) {
+  if(signal(SIGINT, sig_int) == SIG_ERR) {
     printf("\nCan't catch SIGINT\n");
+    exit(1);
+  }
+
+  /* Register a signal handler for sigpipe in case someone closes a socket
+   * while we are in the middle of writing it */
+  if(signal(SIGPIPE, sig_pipe) == SIG_ERR) {
+    printf("\nCan't catch SIGPIPE\n");
     exit(1);
   }
 
@@ -374,7 +387,7 @@ int main(int argc, char **argv)
   }
 }
 
-static void sig_exit(int signo)
+static void sig_int(int signo)
 {
   if(signo == SIGINT) {
     ktimer_stop(&ktimer);
@@ -382,6 +395,13 @@ static void sig_exit(int signo)
     close(listenfd);
     print_lifetime_statistics();
     exit(0);
+  }
+}
+
+static void sig_pipe(int signo)
+{
+  if(signo == SIGPIPE) {
+    logger(LOG, "SIGPIPE caught.", "", 0);
   }
 }
 
