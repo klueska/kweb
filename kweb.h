@@ -65,7 +65,6 @@ char *page_data[] = {
   "</body></html>\n",
 
   "HTTP/1.1 404 Not Found\r\n"
-  "Connection: close\r\n"
   "Content-Length: 138\r\n"
   "Content-Type: text/html\r\n\r\n"
   "<html><head>\n"
@@ -78,7 +77,6 @@ char *page_data[] = {
   "HTTP/1.1 200 OK\r\n"
   "Server: kweb/%s\r\n"
   "Content-Length: %ld\r\n"
-  "Connection: close\r\n"
   "Content-Type: %s\r\n\r\n"
 };
 
