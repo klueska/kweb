@@ -21,8 +21,8 @@ struct server_stats {
   uint64_t tsc_freq;
 };
 
-struct http_request {
-  struct kitem req;
+struct http_connection {
+  struct kitem conn;
   int socketfd;
   int state;
   int req_length;
