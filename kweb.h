@@ -65,8 +65,8 @@ char *page_data[] = {
   "</body></html>\n",
 
   "HTTP/1.1 404 Not Found\r\n"
-  "Content-Length: 136\r\n"
   "Connection: close\r\n"
+  "Content-Length: 138\r\n"
   "Content-Type: text/html\r\n\r\n"
   "<html><head>\n"
   "<title>404 Not Found</title>\n"
