@@ -82,29 +82,30 @@ char *page_data[] = {
 void logger(int type, char *s1, char *s2, int socket_fd)
 {
   int fd;
-  char logbuffer[BUFSIZE*2];
+  char *logbuffer = malloc(BUFSIZE*2);
 
   switch (type) {
     case ERROR:
-      sprintf(logbuffer,"ERROR: %s:%s Errno=%d exiting pid=%d",
+      sprintf(logbuffer, "ERROR: %s:%s Errno=%d exiting pid=%d",
               s1, s2, errno, getpid()); 
       break;
     case FORBIDDEN: 
-      sprintf(logbuffer,"FORBIDDEN: %s:%s", s1, s2); 
+      sprintf(logbuffer, "FORBIDDEN: %s:%s", s1, s2); 
       break;
     case NOTFOUND: 
-      sprintf(logbuffer,"NOT FOUND: %s:%s", s1, s2); 
+      sprintf(logbuffer, "NOT FOUND: %s:%s", s1, s2); 
       break;
     case LOG:
-      sprintf(logbuffer," INFO: %s:%s:%d", s1, s2, socket_fd);
+      sprintf(logbuffer, "INFO: %s:%s:%d", s1, s2, socket_fd);
       break;
   }  
   /* No checks here, nothing can be done with a failure anyway */
-  if((fd = open("kweb.log", O_CREAT | O_WRONLY | O_APPEND, 0644)) >= 0) {
+  if((fd = open("kweb.log", O_CREAT | O_WRONLY | O_APPEND, 0643)) >= 0) {
     write(fd, logbuffer, strlen(logbuffer)); 
     write(fd, "\n", 1);      
     close(fd);
   }
+  free(logbuffer);
 }
 #endif // DEBUG
 #endif // KWEB_H
