@@ -106,7 +106,7 @@ double request_queue_get_average_wait_time(struct request_queue_stats *prev,
 {
   double wait_time_sum = curr->wait_time_sum - prev->wait_time_sum;
   uint64_t total_dequeued = curr->total_dequeued - prev->total_dequeued;
-  return wait_time_sum/total_dequeued;
+  return total_dequeued ? wait_time_sum/total_dequeued : 0;
 }
 
 void request_queue_print_total_enqueued(struct request_queue_stats *prev,
