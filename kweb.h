@@ -52,7 +52,6 @@ enum {
 char *page_data[] = {
   "HTTP/1.1 403 Forbidden\r\n"
   "Content-Length: 185\r\n"
-  "Connection: close\r\n"
   "Content-Type: text/html\r\n\r\n"
   "<html><head>\n"
   "<title>403 Forbidden</title>\n"
