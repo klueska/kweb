@@ -123,20 +123,51 @@ static int extract_request(struct http_connection *c,
 
 static int intercept_url(char *url)
 {
-  if(!strncmp(url, "/start_measurements", 12)) {
-    int period_ms = 1000;
-    printf("Started Measurements\n");
-    printf("Interval Length: %d\n", period_ms);
-    ktimer_init(&ktimer, period_ms, ktimer_callback, NULL);
+  if(!strncmp(url, "/start_measurements", 19)) {
+    struct query_params {
+      int period_ms;
+      int file_size;
+      int tpool_size;
+    } query_params = {
+      .period_ms = 1000,
+      .file_size = 0,
+      .tpool_size = tpool.size,
+    };
+    void parse_query_string(char* query, struct query_params *p) {
+      char *saveptr;
+      char *token = strtok_r(query, "&", &saveptr);
+      while(token != NULL) {
+        char *saveptr2;
+        char *name = strtok_r(token, "=", &saveptr2);
+        char *value = strtok_r(NULL, "=", &saveptr2);
+        if(!strcmp(name, "period_ms"))
+          p->period_ms = atoi(value);
+        if(!strcmp(name, "file_size"))
+          p->file_size = atoi(value);
+        if(!strcmp(name, "tpool_size"))
+          p->tpool_size = atoi(value);
+        token = strtok_r(NULL, "&", &saveptr);
+      }
+    }
+    if(url[19] == '?')
+      parse_query_string(&url[20], &query_params);
+
+    ktimer_init(&ktimer, query_params.period_ms, ktimer_callback, NULL);
+    tpool_resize(&tpool, query_params.tpool_size);
+
+    printf("Starting Measurements\n");
+    printf("Interval Length: %ld\n", ktimer.period_ms);
+    printf("Thread Pool Size: %d\n", tpool.size);
+    printf("File Size: %d\n", query_params.file_size);
     ktimer_start(&ktimer);
     return 1;
   }
-  if(!strncmp(url, "/stop_measurements", 11)) {
+  if(!strcmp(url, "/stop_measurements")) {
     ktimer_stop(&ktimer);
     printf("Stopped Measurements\n");
     return 1;
   }
-  if(!strncmp(url, "/terminate", 11)) {
+  if(!strcmp(url, "/terminate")) {
     sig_int(SIGINT);
     return 1;
   }
