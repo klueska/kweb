@@ -14,7 +14,7 @@
 #include <pthread.h>
 #include <signal.h>
 
-#define DEBUG
+//#define DEBUG
 #include "kweb.h"
 #include "tpool.h"
 #include "kqueue.h"
@@ -89,64 +89,36 @@ static int find_request(char *src, int max_len)
   return request_len;
 }
 
-static int buffer_request_or_die(struct http_connection *c)
+static int extract_request(struct http_connection *c,
+                           struct http_request *r)
 {
-  if(c->ibuf_length)
-    memmove(c->ibuf, &c->ibuf[c->req_length], c->ibuf_length);
-
   int ret = 0;
   while(1) {
-    /* Find a request in the ibuf */
-    int len = find_request(c->ibuf, c->ibuf_length);
+    /* Find a request in the connection buf */
+    int len = find_request(c->buf, c->buf_length);
     
     /* If we found one, update some variables and return to process it */
     if(len > 0) {
-      c->req_length = len;
-      c->ibuf_length = c->ibuf_length - len;
+      r->length = len;
+      c->buf_length = c->buf_length - len;
+      memcpy(r->buf, c->buf, r->length);
+      memmove(c->buf, &c->buf[r->length], c->buf_length);
       return len;
     }
 
     /* Otherwise, try and read in the next request from the socket */
-    ret = read(c->socketfd, &c->ibuf[c->ibuf_length],
-               sizeof(c->ibuf) - c->ibuf_length);   
+    ret = read(c->socketfd, &c->buf[c->buf_length],
+               sizeof(c->buf) - c->buf_length);   
 
-    /* If the return code is invalid or marks the end of a connection, break
-     * and deal with it. */
+	/* If the return code is invalid or marks the end of a connection, just
+     * return it. */
     if(ret <= 0)
-      break;
+      return ret;
 
-    /* Otherwise, update the ibuf_length and loop back around to try and
+    /* Otherwise, update the buf_length and loop back around to try and
      * extract the request again. */
-    c->ibuf_length += ret;
+    c->buf_length += ret;
   }
-
-  /* Otherwise... */
-  switch(c->state) {
-    case REQ_NEW:
-      /* Fail on a new request, and send back a FORBIDDEN error */
-      logger(FORBIDDEN, "Failed to read browser request", "", c->socketfd);
-      write(c->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
-      break;
-    case REQ_ALIVE:
-	  /* On a reenqueued request, it is OK for ret to return either no bytes or
-	   * an error code. If it's an error code, simply log that the connection
-	   * was killed prematurely by the client.*/
-      if(ret == -1)
-        logger(LOG, "Connection reset by peer.", "", c->conn.id);
-      break;
-  }
-  /* In any case, close the socket because we are done with it */
-  close(c->socketfd);
-  return ret;
-}
-
-static void reenqueue_or_complete(struct kqueue *q,
-                                  struct http_connection *c)
-{
-  if(buffer_request_or_die(c) > 0)
-    kqueue_enqueue_item(q, &c->conn);
-  else
-    kqueue_destroy_item(q, &c->conn);
 }
 
 static int intercept_url(char *url)
@@ -171,35 +143,74 @@ static int intercept_url(char *url)
   return 0;
 }
 
+static void enqueue_connection(struct kqueue *q,
+                               struct http_connection *c)
+{
+  __sync_fetch_and_add(&c->ref_count, 1);
+  kqueue_enqueue_item(q, &c->conn);
+  tpool_wake(&tpool, 1);
+}
+
+static void maybe_destroy_connection(struct kqueue *q,
+                                     struct http_connection *c)
+{
+  __sync_fetch_and_add(&c->ref_count, -1);
+  if(c->ref_count == 0) {
+    close(c->socketfd);
+    kqueue_destroy_item(q, &c->conn);
+  }
+}
+
+static ssize_t connection_write(struct http_connection *c,
+                                const void *buf, size_t count)
+{
+  pthread_mutex_lock(&c->writelock);
+  ssize_t ret = write(c->socketfd, buf, count);
+  pthread_mutex_unlock(&c->writelock);
+  return ret;
+}
+
 /* This is a child web server thread */
 void http_server(struct kqueue *q, struct kitem *__c)
 {
   struct http_connection *c = (struct http_connection *)__c;
+  struct http_request r;
   int j, file_fd, buflen;
   long i = 0, ret = 0, len = 0;
   char *fstr;
   char *request_line;
   char *saveptr;
 
-  /* If this is a new connection, buffer the first request
-   * or destroy the connection and return if that is unsuccessful. */
-  if(c->state == REQ_NEW) {
-    if(buffer_request_or_die(c) <= 0) {
-      kqueue_destroy_item(q, &c->conn);
-      return;
-    }
-  }
-  c->state = REQ_ALIVE;
+  /* Try and extract a request from the connection. */
+  ret = extract_request(c, &r);
 
-  /* Otherwise ...
-   * Parse through the request, grabbing only what we care about */
-  request_line = strtok_r(c->ibuf, "\r\n", &saveptr);
+  /* If there was an error, just destroy the connection, as there is
+   * nothing more we can do with this connection anyway. */
+  if(ret < 0) {
+    logger(LOG, "Connection reset by peer.", "", c->conn.id);
+    maybe_destroy_connection(q, c);
+    return;
+  }
+
+  /* If there was no error, but we weren't able to extract a request, finish up
+   * if we are the last one to look at the connection. */
+  if(ret == 0) {
+    maybe_destroy_connection(q, c);
+    return;
+  }
+
+  /* Otherwise, just reenqueue the connection so another thread can grab the
+   * next request and start processing it if there is one. */ 
+  enqueue_connection(q, c);
+
+  /* Now parse through the extracted request, grabbing only what we care about */
+  request_line = strtok_r(r.buf, "\r\n", &saveptr);
 
   /* Make sure it's a GET operation */
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
     logger(FORBIDDEN, "Only simple GET operation supported", request_line, c->socketfd);
-    write(c->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
-    reenqueue_or_complete(q, c);
+    connection_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
+    maybe_destroy_connection(q, c);
     return;
   }
   logger(LOG, "Request", request_line, c->conn.id);
@@ -216,10 +227,10 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Intercept certain urls and do something special. */
   if(intercept_url(&request_line[4])) {
     /* Send the necessary header info + a blank line */
-    sprintf(c->obuf, page_data[OK_HEADER], VERSION, 0, "text/plain");
     logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
-    write(c->socketfd, c->obuf, strlen(c->obuf));
-    reenqueue_or_complete(q, c);
+    sprintf(r.buf, page_data[OK_HEADER], VERSION, 0, "text/plain");
+    connection_write(c, r.buf, strlen(r.buf));
+    maybe_destroy_connection(q, c);
     return;
   }
 
@@ -236,8 +247,8 @@ void http_server(struct kqueue *q, struct kitem *__c)
   for(j=4; j<i-1; j++) {
     if(request_line[j] == '.' && request_line[j+1] == '.') {
       logger(FORBIDDEN, "Parent directory (..) path names not supported", request_line, c->socketfd);
-      write(c->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
-      reenqueue_or_complete(q, c);
+      connection_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
+      maybe_destroy_connection(q, c);
       return;
     }
   }
@@ -258,16 +269,16 @@ void http_server(struct kqueue *q, struct kitem *__c)
   }
   if(fstr == 0) {
     logger(FORBIDDEN, "File extension type not supported", request_line, c->socketfd);
-    write(c->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
-    reenqueue_or_complete(q, c);
+    connection_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
+    maybe_destroy_connection(q, c);
     return;
   }
 
   /* Open the file for reading */
   if((file_fd = open(&request_line[5], O_RDONLY)) == -1) {
     logger(NOTFOUND, "Failed to open file", &request_line[5], c->socketfd);
-    write(c->socketfd, page_data[NOTFOUND_PAGE], strlen(page_data[NOTFOUND_PAGE]));
-    reenqueue_or_complete(q, c);
+    connection_write(c, page_data[NOTFOUND_PAGE], strlen(page_data[NOTFOUND_PAGE]));
+    maybe_destroy_connection(q, c);
     return;
   }
 
@@ -275,21 +286,26 @@ void http_server(struct kqueue *q, struct kitem *__c)
   len = lseek(file_fd, 0, SEEK_END);
   lseek(file_fd, 0, SEEK_SET);
 
+  /* Prepopulate the request buf with the beginning of the requested file */
+  ret = read(file_fd, r.buf, sizeof(r.buf));
+
   /* Start sending a response */
   logger(LOG, "SEND", &request_line[5], c->conn.id);
 
   /* Send the necessary header info + a blank line */
-  sprintf(c->obuf, page_data[OK_HEADER], VERSION, len, fstr);
-  logger(LOG, "Header", c->obuf, c->conn.id);
-  write(c->socketfd, c->obuf, strlen(c->obuf));
-
+  pthread_mutex_lock(&c->writelock);
+  sprintf(r.rsp_header, page_data[OK_HEADER], VERSION, len, fstr);
+  logger(LOG, "Header", r.rsp_header, c->conn.id);
+  write(c->socketfd, r.rsp_header, strlen(r.rsp_header));
   /* Send the file itself in 8KB chunks - last block may be smaller */
-  while((ret = read(file_fd, c->obuf, sizeof(c->obuf))) > 0) {
-    if(write(c->socketfd, c->obuf, ret) < 0)
+  do {
+    if(write(c->socketfd, r.buf, ret) < 0)
       logger(LOG, "Write error on socket.", "", c->socketfd);
-  }
+  } while((ret = read(file_fd, r.buf, sizeof(r.buf))) > 0);
+  pthread_mutex_unlock(&c->writelock);
+
   close(file_fd);
-  reenqueue_or_complete(q, c);
+  maybe_destroy_connection(q, c);
 }
 
 int main(int argc, char **argv)
@@ -420,12 +436,11 @@ int main(int argc, char **argv)
     else {
       struct http_connection *c;
       c = kqueue_create_item(&kqueue);
-      c->state = REQ_NEW;
+      pthread_mutex_init(&c->writelock, NULL);
+      c->ref_count = 0;
       c->socketfd = socketfd;
-      c->req_length = 0;
-      c->ibuf_length = 0;
-      kqueue_enqueue_item(&kqueue, &c->conn);
-      tpool_wake(&tpool, 1);
+      c->buf_length = 0;
+      enqueue_connection(&kqueue, c);
     }
   }
 }

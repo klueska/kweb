@@ -1,6 +1,7 @@
 #ifndef KWEB_H
 #define KWEB_H
 
+#include "pthread.h"
 #include "kqueue.h"
 
 #define VERSION  "1.0"
@@ -21,14 +22,19 @@ struct server_stats {
   uint64_t tsc_freq;
 };
 
+struct http_request {
+  char rsp_header[100];
+  char buf[BUFSIZE+1];
+  int length;
+};
+
 struct http_connection {
   struct kitem conn;
+  pthread_mutex_t writelock;
+  int ref_count;
   int socketfd;
-  int state;
-  int req_length;
-  int ibuf_length;
-  char ibuf[BUFSIZE+1];
-  char obuf[BUFSIZE+1];
+  int buf_length;
+  char buf[BUFSIZE+1];
 };
 
 struct {
