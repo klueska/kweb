@@ -92,20 +92,28 @@ static long buffer_next_or_finish(struct http_request *r)
 
   int ret = 0;
   while(1) {
+    /* Find a request in the ibuf */
     int len = find_request(r->ibuf, r->ibuf_length);
+    
+    /* If we found one, update ssome variables and return to process it */
     if(len > 0) {
       r->req_length = len;
       r->ibuf_length = r->ibuf_length - len;
       return len;
     }
+
+    /* Otherwise, try and read in the next request from the socket */
     ret = read(r->socketfd, &r->ibuf[r->ibuf_length],
                sizeof(r->ibuf) - r->ibuf_length);   
-    r->ibuf_length += ret;
 
-	/* If the return code is a valid number of chars, break and handle it.
-     * Otherwise, loop back around to try and extract the request again. */
+    /* If the return code is invalid or marks the end of a connection, break
+     * and deal with it. */
     if(ret <= 0)
       break;
+
+    /* Otherwise, update the ibuf_length and loop back around to try and
+     * extract the request again. */
+    r->ibuf_length += ret;
   }
 
   /* Otherwise... */
