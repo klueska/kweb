@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <linux/futex.h>
 #include <pthread.h>
@@ -41,13 +42,38 @@ static void *__thread_wrapper(void *arg)
       t->stats.active_threads++;
       spinlock_unlock(&t->lock);
     }
+    if(t->size > t->new_size) {
+      __sync_fetch_and_add(&t->size, -1);
+      spinlock_lock(&t->lock);
+      t->stats.active_threads--;
+      spinlock_unlock(&t->lock);
+      return NULL;
+    }
   }
+}
+
+static int create_threads(struct tpool *t, int num)
+{
+  int created;
+  pthread_t thread;
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN*4);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+  for(int i=0; i<num; i++) {
+    if(pthread_create(&thread, &attr, __thread_wrapper, t) == 0)
+      created++;
+    else
+      break;
+  }
+  return created;
 }
 
 int tpool_init(struct tpool *t, int size, struct kqueue *q,
                void (*func)(struct kqueue *, struct kitem *))
 {
   t->size = 0;
+  t->new_size = 0;
   t->q = q;
   t->func = func;
   spinlock_init(&t->lock);
@@ -56,19 +82,35 @@ int tpool_init(struct tpool *t, int size, struct kqueue *q,
   t->stats.active_threads_samples = 0;
   t->stats.items_processed = 0;
   t->stats.processing_time_sum = 0;
-
-  pthread_t thread;
-  pthread_attr_t attr;
-  pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN*4);
-  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-  for(int i=0; i<size; i++) {
-    if(pthread_create(&thread, &attr, __thread_wrapper, t) == 0)
-      t->size++;
-    else
-      break;
-  }
+  t->size = create_threads(t, size);
+  t->new_size = t->size;
   return t->size;
+}
+
+void tpool_resize(struct tpool *t, int size)
+{
+  int new_size = *((volatile int *)(&(t->new_size)));
+  do {
+    while(t->size != new_size) {
+      pthread_yield();
+      cpu_relax();
+      new_size = *((volatile int *)(&(t->new_size)));
+    }
+  } while(!__sync_bool_compare_and_swap(&t->new_size, new_size, size));
+
+  if(t->new_size < 1 || t->new_size == t->size)
+    return;
+
+  if(t->new_size > t->size) {
+    t->size += create_threads(t, t->new_size - t->size);
+  }
+  else {
+    futex_wake(&t->q->qstats.total_enqueued, INT_MAX);
+    while(t->size != t->new_size) {
+      pthread_yield();
+      cpu_relax();
+    }
+  }
 }
 
 void tpool_wake(struct tpool *t, int count)

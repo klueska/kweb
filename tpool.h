@@ -14,6 +14,7 @@ struct tpool_stats {
 
 struct tpool {
   int size;
+  int new_size;
   struct kqueue *q;
   void (*func)(struct kqueue *, struct kitem *);
   spinlock_t lock;
@@ -22,6 +23,7 @@ struct tpool {
 
 int tpool_init(struct tpool *t, int size, struct kqueue *q,
                void (*func)(struct kqueue *, struct kitem *));
+void tpool_resize(struct tpool *t, int size);
 void tpool_wake(struct tpool *t, int count);
 
 struct tpool_stats tpool_get_stats(struct tpool *t);
