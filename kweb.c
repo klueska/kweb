@@ -13,6 +13,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
+
+//#define DEBUG
 #include "kweb.h"
 #include "cpu_util.h"
 #include "ktimer.h"
@@ -62,7 +64,7 @@ static long buffer_next_or_finish(struct http_request *r)
 	   * an error code. If it's an error code, simply log that the connection
 	   * was killed prematurely by the client.*/
       if(ret == -1)
-        logger(LOG, "Connection reset by peer.", buffer, r->req.id);
+        logger(LOG, "Connection reset by peer.", r->buffer, r->req.id);
       break;
   }
   /* In any case, close the socket because we are done with it */
