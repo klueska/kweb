@@ -9,6 +9,7 @@ struct tpool_stats {
   double active_threads_sum;
   int active_threads_samples;
   int requests_processed;
+  double processing_time_sum;
 };
 
 struct tpool {
@@ -28,9 +29,13 @@ int tpool_get_requests_processed(struct tpool_stats *prev,
                                  struct tpool_stats *curr);
 double tpool_get_average_active_threads(struct tpool_stats *prev,
                                         struct tpool_stats *curr);
+double tpool_get_average_processing_time(struct tpool_stats *prev,
+                                         struct tpool_stats *curr);
 void tpool_print_requests_processed(struct tpool_stats *prev,
                                     struct tpool_stats *curr);
 void tpool_print_average_active_threads(struct tpool_stats *prev,
                                         struct tpool_stats *curr);
+void tpool_print_average_processing_time(struct tpool_stats *prev,
+                                         struct tpool_stats *curr);
 
 #endif // TPOOL_H

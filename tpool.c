@@ -26,8 +26,11 @@ static void *__thread_wrapper(void *arg)
     spinlock_unlock(&t->lock);
 
     if(r) {
+      uint64_t beg = read_tsc();
       t->func(t->q, r);
+      uint64_t end = read_tsc();
       spinlock_lock(&t->lock);
+      t->stats.processing_time_sum += (end - beg);
       t->stats.requests_processed++;
       spinlock_unlock(&t->lock);
     }
@@ -51,6 +54,7 @@ int tpool_init(struct tpool *t, int size, struct request_queue *q,
   t->stats.active_threads_sum = 0;
   t->stats.active_threads_samples = 0;
   t->stats.requests_processed = 0;
+  t->stats.processing_time_sum = 0;
 
   pthread_t thread;
   pthread_attr_t attr;
@@ -90,7 +94,15 @@ double tpool_get_average_active_threads(struct tpool_stats *prev,
 {
   int active_threads_samples = curr->active_threads_samples - prev->active_threads_samples;
   double active_threads_sum = curr->active_threads_sum - prev->active_threads_sum;
-  return active_threads_samples ?  active_threads_sum/active_threads_samples : 0;
+  return active_threads_samples ? active_threads_sum/active_threads_samples : 0;
+}
+
+double tpool_get_average_processing_time(struct tpool_stats *prev,
+                                         struct tpool_stats *curr)
+{
+  int requests_processed = tpool_get_requests_processed(prev, curr);
+  double processing_time_sum = curr->processing_time_sum - prev->processing_time_sum;
+  return requests_processed ? processing_time_sum/requests_processed : 0;
 }
 
 void tpool_print_requests_processed(struct tpool_stats *prev,
@@ -105,5 +117,12 @@ void tpool_print_average_active_threads(struct tpool_stats *prev,
 {
   double average = tpool_get_average_active_threads(prev, curr);
   printf("Average active threads: %lf\n", average);
+}
+
+void tpool_print_average_processing_time(struct tpool_stats *prev,
+                                         struct tpool_stats *curr)
+{
+  double average = tpool_get_average_processing_time(prev, curr);
+  printf("Average request processing time: %lf\n", average);
 }
 
