@@ -21,9 +21,8 @@ struct http_request {
   struct request req;
   int socketfd;
   int state;
-  int rbuf_length;
+  int req_length;
   int ibuf_length;
-  char rbuf[BUFSIZE+1];
   char ibuf[BUFSIZE+1];
   char obuf[BUFSIZE+1];
 };

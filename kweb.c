@@ -54,7 +54,7 @@ static int find_crlf(char *buf, int max_len)
   return loc;
 }
 
-static int extract_request(char *dst, char *src, int max_len)
+static int find_request(char *src, int max_len)
 {
   int i = 0;
   char *curr_line = NULL;
@@ -82,20 +82,20 @@ static int extract_request(char *dst, char *src, int max_len)
   if(i <= 0 || (i+content_length) > max_len)
     return -1;
   request_len = i + content_length;
-  memcpy(dst, src, request_len);
   return request_len;
 }
 
 static long buffer_next_or_finish(struct http_request *r)
 {
+  if(r->ibuf_length)
+    memmove(r->ibuf, &r->ibuf[r->req_length], r->ibuf_length);
+
   int ret = 0;
   while(1) {
-    int len = extract_request(r->rbuf, r->ibuf, r->ibuf_length);
+    int len = find_request(r->ibuf, r->ibuf_length);
     if(len > 0) {
-      r->rbuf[len] = '\0';
-      r->rbuf_length = len;
+      r->req_length = len;
       r->ibuf_length = r->ibuf_length - len;
-      memmove(r->ibuf, &r->ibuf[r->rbuf_length], r->ibuf_length);
       return len;
     }
     ret = read(r->socketfd, &r->ibuf[r->ibuf_length],
@@ -150,7 +150,7 @@ void http_server(struct request_queue *q, struct request *__r)
 
   /* Otherwise ...
    * Parse through the request, grabbing only what we care about */
-  request_line = strtok_r(r->rbuf, "\r\n", &saveptr);
+  request_line = strtok_r(r->ibuf, "\r\n", &saveptr);
 
   /* Make sure it's a GET operation */
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
