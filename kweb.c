@@ -85,7 +85,7 @@ static int find_request(char *src, int max_len)
   return request_len;
 }
 
-static long buffer_next_or_finish(struct http_request *r)
+static int buffer_next_or_die(struct http_request *r)
 {
   if(r->ibuf_length)
     memmove(r->ibuf, &r->ibuf[r->req_length], r->ibuf_length);
@@ -136,7 +136,16 @@ static long buffer_next_or_finish(struct http_request *r)
   return ret;
 }
 
-int intercept_url(char *url, struct http_request *r)
+static void reenqueue_or_complete(struct request_queue *q,
+                                  struct http_request *r)
+{
+  if(buffer_next_or_die(r) > 0)
+    request_queue_enqueue_request(q, &r->req);
+  else
+    request_queue_destroy_request(q, &r->req);
+}
+
+static int intercept_url(char *url)
 {
   if(!strncmp(url, "/start_timer", 12)) {
     ktimer_start(&ktimer);
@@ -144,11 +153,6 @@ int intercept_url(char *url, struct http_request *r)
   if(!strncmp(url, "/stop_timer", 11)) {
     ktimer_stop(&ktimer);
   }
-
-  /* Send the necessary header info + a blank line */
-  sprintf(r->obuf, page_data[OK_HEADER], VERSION, 0, "text/plain");
-  logger(LOG, "INTERCEPT URL", url, r->req.id);
-  write(r->socketfd, r->obuf, strlen(r->obuf));
 }
 
 /* This is a child web server thread */
@@ -164,7 +168,7 @@ void http_server(struct request_queue *q, struct request *__r)
   /* If this is a new request, buffer it up,
    * or destroy it and return if that is unsuccessful. */
   if(r->state == REQ_NEW) {
-    if((ret = buffer_next_or_finish(r)) <= 0) {
+    if(buffer_next_or_die(r) <= 0) {
       request_queue_destroy_request(q, &r->req);
       return;
     }
@@ -194,13 +198,13 @@ void http_server(struct request_queue *q, struct request *__r)
   }
 
   /* Intercept certain urls and do something special. */
-  if(intercept_url(&request_line[4], r)) {
-    if(buffer_next_or_finish(r) > 0) {
-      request_queue_enqueue_request(q, &r->req);
-    }
-    else {
-      request_queue_destroy_request(q, &r->req);
-    }
+  if(intercept_url(&request_line[4])) {
+    /* Send the necessary header info + a blank line */
+    sprintf(r->obuf, page_data[OK_HEADER], VERSION, 0, "text/plain");
+    logger(LOG, "INTERCEPT URL", url, r->req.id);
+    write(r->socketfd, r->obuf, strlen(r->obuf));
+
+    reenqueue_or_complete(q, r);
     return;
   }
 
@@ -265,15 +269,7 @@ void http_server(struct request_queue *q, struct request *__r)
     }
   }
   close(file_fd);
-
-  /* If there is another request to handle, read it, and reenqueue it for
-   * processing by another thread */
-  if(buffer_next_or_finish(r) > 0) {
-    request_queue_enqueue_request(q, &r->req);
-  }
-  else {
-    request_queue_destroy_request(q, &r->req);
-  }
+  reenqueue_or_complete(q, r);
 }
 
 int main(int argc, char **argv)
