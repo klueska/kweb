@@ -105,10 +105,10 @@ void http_server(struct request_queue *q, struct request *__r)
     return;
   }
 
-  /* Strip the version info from the request_line */
+  /* Strip all query data and the version info from the request_line */
   for(i=4; i<strlen(request_line); i++) {
-    /* String is "GET URL " + lots of other stuff */
-    if(request_line[i] == ' ') {
+    /* String is "GET URL?<query_data> HTTP_VERSION" */
+    if(request_line[i] == ' ' || request_line[i] == '?') {
       request_line[i] = '\0';
       break;
     }
