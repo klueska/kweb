@@ -7,7 +7,7 @@
 
 #define ERROR       42
 #define LOG         44
-#define BUFSIZE   8096
+#define BUFSIZE   8192
 
 #define FORBIDDEN  403
 #define NOTFOUND   404
@@ -21,7 +21,11 @@ struct http_request {
   struct request req;
   int socketfd;
   int state;
-  char buffer[BUFSIZE+1];
+  int rbuf_length;
+  int ibuf_length;
+  char rbuf[BUFSIZE+1];
+  char ibuf[BUFSIZE+1];
+  char obuf[BUFSIZE+1];
 };
 
 struct {

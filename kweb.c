@@ -37,19 +37,78 @@ static void ktimer_callback(void *arg);
 static void print_interval_statistics();
 static void print_lifetime_statistics();
 
+static int find_crlf(char *buf, int max_len)
+{
+  int loc = -1;
+  int cri = 0;
+  for(int i=0; i<max_len; i++) {
+    if(buf[i] == '\r') {
+      cri = i;
+    }
+    if((cri == (i-1)) && (buf[i] == '\n')) {
+      loc = cri;
+      break;
+    }
+  }
+  return loc;
+}
+
+static int extract_request(char *dst, char *src, int max_len)
+{
+  int i = 0;
+  char *curr_line = NULL;
+  int curr_line_len = 0;
+  int content_length = 0;
+  int request_len = 0;
+  while(i < max_len) {
+    curr_line = &src[i];
+    curr_line_len = find_crlf(curr_line, max_len-i);
+    if(curr_line_len < 0) {
+      i = -1; break;
+    }
+    if(curr_line_len == 0) {
+      i += 2; break;
+    }
+    if(curr_line_len > 16 && (!strncmp(curr_line, "Content-Length: ", 16))) {
+      int cls_len = curr_line_len-16;
+      char *cls = alloca(cls_len+1);
+      cls[cls_len] = '\0';
+      memcpy(cls, &curr_line[16], cls_len);
+      content_length = atoi(cls);
+    }
+    i += curr_line_len+2;
+  }
+  if(i <= 0 || (i+content_length) > max_len)
+    return -1;
+  request_len = i + content_length;
+  memcpy(dst, src, request_len);
+  return request_len;
+}
+
 static long buffer_next_or_finish(struct http_request *r)
 {
-  /* Reset the buffer */
-  r->buffer[0] = '\0';
+  /* Shift the read buffer back to the beginning if there is an offset to
+   * process left over from the last read */
+  if(r->ibuf_length > 0)
+    memmove(r->ibuf, &r->ibuf[r->rbuf_length], r->ibuf_length);
 
-  /* Read the request in one go */
-  long ret = read(r->socketfd, r->buffer, sizeof(r->buffer));   
+  int ret = 0;
+  while(1) {
+    int len = extract_request(r->rbuf, r->ibuf, r->ibuf_length);
+    if(len > 0) {
+      r->rbuf[len] = '\0';
+      r->rbuf_length = len;
+      r->ibuf_length = r->ibuf_length - len;
+      return len;
+    }
+    ret = read(r->socketfd, &r->ibuf[r->ibuf_length],
+               sizeof(r->ibuf) - r->ibuf_length);   
+    r->ibuf_length += ret;
 
-  /* If the return code is a valid number of chars, terminate the buffer
-   * appropriately and return so we can process the request */
-  if(ret > 0 && ret < sizeof(r->buffer)) {
-    r->buffer[ret] = '\0';
-    return ret;
+	/* If the return code is a valid number of chars, break and handle it.
+     * Otherwise, loop back around to try and extract the request again. */
+    if(ret <= 0)
+      break;
   }
 
   /* Otherwise... */
@@ -64,7 +123,7 @@ static long buffer_next_or_finish(struct http_request *r)
 	   * an error code. If it's an error code, simply log that the connection
 	   * was killed prematurely by the client.*/
       if(ret == -1)
-        logger(LOG, "Connection reset by peer.", r->buffer, r->req.id);
+        logger(LOG, "Connection reset by peer.", "", r->req.id);
       break;
   }
   /* In any case, close the socket because we are done with it */
@@ -94,7 +153,7 @@ void http_server(struct request_queue *q, struct request *__r)
 
   /* Otherwise ...
    * Parse through the request, grabbing only what we care about */
-  request_line = strtok_r(r->buffer, "\r\n", &saveptr);
+  request_line = strtok_r(r->rbuf, "\r\n", &saveptr);
 
   /* Make sure it's a GET operation */
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
@@ -125,8 +184,8 @@ void http_server(struct request_queue *q, struct request *__r)
   }
 
   /* Convert no filename to index file */
-  if(!strncmp(&request_line[0], "GET /\0", 6) || !strncmp(&request_line[0], "get /\0", 6))
-    strcpy(r->buffer, "GET /index.html");
+  if(!strncmp(request_line, "GET /\0", 6) || !strncmp(request_line, "get /\0", 6))
+    strcpy(request_line, "GET /index.html");
 
   /* Check to see if the file is named /terminate.html.
    * If so, kill the webserver and print some statistics */
@@ -166,13 +225,13 @@ void http_server(struct request_queue *q, struct request *__r)
   logger(LOG, "SEND", &request_line[5], r->req.id);
 
   /* Send the necessary header info + a blank line */
-  sprintf(r->buffer, page_data[OK_HEADER], VERSION, len, fstr);
-  logger(LOG, "Header", r->buffer, r->req.id);
-  write(r->socketfd, r->buffer, strlen(r->buffer));
+  sprintf(r->obuf, page_data[OK_HEADER], VERSION, len, fstr);
+  logger(LOG, "Header", r->obuf, r->req.id);
+  write(r->socketfd, r->obuf, strlen(r->obuf));
 
   /* Send the file itself in 8KB chunks - last block may be smaller */
-  while((ret = read(file_fd, r->buffer, sizeof(r->buffer))) > 0) {
-    write(r->socketfd, r->buffer, ret);
+  while((ret = read(file_fd, r->obuf, sizeof(r->obuf))) > 0) {
+    write(r->socketfd, r->obuf, ret);
   }
   close(file_fd);
 
