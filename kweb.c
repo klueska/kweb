@@ -466,7 +466,7 @@ static void print_statistics(struct request_queue_stats *rqprev,
   request_queue_print_average_size(rqprev, rqcurr);
   request_queue_print_average_wait_time(rqprev, rqcurr);
   tpool_print_average_processing_time(tpprev, tpcurr);
-  cpu_util_print_average_load(cuprev, cucurr);
+  cpu_util_print_average(cuprev, cucurr);
 }
 
 static void print_interval_statistics()

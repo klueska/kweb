@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include "spinlock.h"
 
-struct proc_load {
+struct proc_util {
   double user;
   double sys;
 };
@@ -27,10 +27,10 @@ void cpu_util_init(struct cpu_util *c);
 void cpu_util_fini(struct cpu_util *c);
 
 struct cpu_util_stats cpu_util_get_stats(struct cpu_util *c);
-struct proc_load cpu_util_get_average_load(struct cpu_util_stats *prev,
-                                           struct cpu_util_stats *curr);
-void cpu_util_print_average_load(struct cpu_util_stats *prev,
-                                 struct cpu_util_stats *curr);
+struct proc_util cpu_util_get_average(struct cpu_util_stats *prev,
+                                      struct cpu_util_stats *curr);
+void cpu_util_print_average(struct cpu_util_stats *prev,
+                            struct cpu_util_stats *curr);
 
 #endif // CPU_UTIL_H
 
