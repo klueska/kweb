@@ -95,7 +95,7 @@ static long buffer_next_or_finish(struct http_request *r)
     /* Find a request in the ibuf */
     int len = find_request(r->ibuf, r->ibuf_length);
     
-    /* If we found one, update ssome variables and return to process it */
+    /* If we found one, update some variables and return to process it */
     if(len > 0) {
       r->req_length = len;
       r->ibuf_length = r->ibuf_length - len;
