@@ -172,9 +172,9 @@ static int intercept_url(char *url)
 }
 
 /* This is a child web server thread */
-void http_server(struct kqueue *q, struct kitem *ki)
+void http_server(struct kqueue *q, struct kitem *__r)
 {
-  struct http_request *r = (struct http_request *)ki;
+  struct http_request *r = (struct http_request *)__r;
   int j, file_fd, buflen;
   long i = 0, ret = 0, len = 0;
   char *fstr;
@@ -462,28 +462,30 @@ static void ktimer_callback(void *arg)
   print_interval_statistics();
 }
 
-static void print_statistics(struct kqueue_stats *rqprev,
+static void print_statistics(char *prefix,
+                             struct kqueue_stats *rqprev,
                              struct kqueue_stats *rqcurr,
                              struct tpool_stats *tpprev,
                              struct tpool_stats *tpcurr,
                              struct cpu_util_stats *cuprev,
                              struct cpu_util_stats *cucurr)
 {
-  printf("Timestamp: %llu\n", read_tsc());
-  kqueue_print_total_enqueued(rqprev, rqcurr);
-  tpool_print_items_processed(tpprev, tpcurr);
-  tpool_print_average_active_threads(tpprev, tpcurr);
-  kqueue_print_average_size(rqprev, rqcurr);
-  kqueue_print_average_wait_time(rqprev, rqcurr);
-  tpool_print_average_processing_time(tpprev, tpcurr);
-  cpu_util_print_average(cuprev, cucurr);
+  printf("%sTimestamp: %llu\n", prefix, read_tsc());
+  kqueue_print_total_enqueued(prefix, rqprev, rqcurr);
+  tpool_print_items_processed(prefix, tpprev, tpcurr);
+  tpool_print_average_active_threads(prefix, tpprev, tpcurr);
+  kqueue_print_average_size(prefix, rqprev, rqcurr);
+  kqueue_print_average_wait_time(prefix, rqprev, rqcurr);
+  tpool_print_average_processing_time(prefix, tpprev, tpcurr);
+  cpu_util_print_average(prefix, cuprev, cucurr);
 }
 
 static void print_interval_statistics()
 {
   printf("\n");
   printf("Interval Statistics:\n");
-  print_statistics(&rqstats_prev, &rqstats_curr,
+  print_statistics("  ",
+                   &rqstats_prev, &rqstats_curr,
                    &tpstats_prev, &tpstats_curr,
                    &custats_prev, &custats_curr);
 }
@@ -492,7 +494,8 @@ static void print_lifetime_statistics()
 {
   printf("\n");
   printf("Lifetime Statistics:\n");
-  print_statistics(&((struct kqueue_stats){0}), &rqstats_curr,
+  print_statistics("  ",
+                   &((struct kqueue_stats){0}), &rqstats_curr,
                    &((struct tpool_stats){0}), &tpstats_curr,
                    &((struct cpu_util_stats){0}), &custats_curr);
 }

@@ -46,11 +46,14 @@ double kqueue_get_average_size(struct kqueue_stats *prev,
                                struct kqueue_stats *curr);
 double kqueue_get_average_wait_time(struct kqueue_stats *prev,
                                     struct kqueue_stats *curr);
-void kqueue_print_total_enqueued(struct kqueue_stats *prev,
+void kqueue_print_total_enqueued(char* prefix,
+                                 struct kqueue_stats *prev,
                                  struct kqueue_stats *curr);
-void kqueue_print_average_size(struct kqueue_stats *prev,
+void kqueue_print_average_size(char* prefix,
+                               struct kqueue_stats *prev,
                                struct kqueue_stats *curr);
-void kqueue_print_average_wait_time(struct kqueue_stats *prev,
+void kqueue_print_average_wait_time(char* prefix,
+                                    struct kqueue_stats *prev,
                                     struct kqueue_stats *curr);
 
 #endif // KQUEUE_H

@@ -29,7 +29,8 @@ void cpu_util_fini(struct cpu_util *c);
 struct cpu_util_stats cpu_util_get_stats(struct cpu_util *c);
 struct proc_util cpu_util_get_average(struct cpu_util_stats *prev,
                                       struct cpu_util_stats *curr);
-void cpu_util_print_average(struct cpu_util_stats *prev,
+void cpu_util_print_average(char *prefix,
+                            struct cpu_util_stats *prev,
                             struct cpu_util_stats *curr);
 
 #endif // CPU_UTIL_H

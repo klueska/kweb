@@ -106,24 +106,27 @@ double tpool_get_average_processing_time(struct tpool_stats *prev,
   return items_processed ? processing_time_sum/items_processed : 0;
 }
 
-void tpool_print_items_processed(struct tpool_stats *prev,
-                                    struct tpool_stats *curr)
+void tpool_print_items_processed(char *prefix,
+                                 struct tpool_stats *prev,
+                                 struct tpool_stats *curr)
 {
   int items_processed = tpool_get_items_processed(prev, curr);
-  printf("Total items processed: %d\n", items_processed);
+  printf("%sTotal items processed: %d\n", prefix, items_processed);
 }
 
-void tpool_print_average_active_threads(struct tpool_stats *prev,
+void tpool_print_average_active_threads(char *prefix,
+                                        struct tpool_stats *prev,
                                         struct tpool_stats *curr)
 {
   double average = tpool_get_average_active_threads(prev, curr);
-  printf("Average active threads: %lf\n", average);
+  printf("%sAverage active threads: %lf\n", prefix, average);
 }
 
-void tpool_print_average_processing_time(struct tpool_stats *prev,
+void tpool_print_average_processing_time(char *prefix,
+                                         struct tpool_stats *prev,
                                          struct tpool_stats *curr)
 {
   double average = tpool_get_average_processing_time(prev, curr);
-  printf("Average item processing time: %lf\n", average);
+  printf("%sAverage item processing time: %lf\n", prefix, average);
 }
 

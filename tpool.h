@@ -31,11 +31,14 @@ double tpool_get_average_active_threads(struct tpool_stats *prev,
                                         struct tpool_stats *curr);
 double tpool_get_average_processing_time(struct tpool_stats *prev,
                                          struct tpool_stats *curr);
-void tpool_print_items_processed(struct tpool_stats *prev,
+void tpool_print_items_processed(char *prefix,
+                                 struct tpool_stats *prev,
                                  struct tpool_stats *curr);
-void tpool_print_average_active_threads(struct tpool_stats *prev,
+void tpool_print_average_active_threads(char *prefix,
+                                        struct tpool_stats *prev,
                                         struct tpool_stats *curr);
-void tpool_print_average_processing_time(struct tpool_stats *prev,
+void tpool_print_average_processing_time(char *prefix,
+                                         struct tpool_stats *prev,
                                          struct tpool_stats *curr);
 
 #endif // TPOOL_H

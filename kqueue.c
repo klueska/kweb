@@ -110,24 +110,27 @@ double kqueue_get_average_wait_time(struct kqueue_stats *prev,
   return total_dequeued ? wait_time_sum/total_dequeued : 0;
 }
 
-void kqueue_print_total_enqueued(struct kqueue_stats *prev,
+void kqueue_print_total_enqueued(char *prefix,
+                                 struct kqueue_stats *prev,
                                  struct kqueue_stats *curr)
 {
   int total_enqueued = kqueue_get_total_enqueued(prev, curr);
-  printf("Total items enqueued: %d\n", total_enqueued);
+  printf("%sTotal items enqueued: %d\n", prefix, total_enqueued);
 }
 
-void kqueue_print_average_size(struct kqueue_stats *prev,
+void kqueue_print_average_size(char *prefix,
+                               struct kqueue_stats *prev,
                                struct kqueue_stats *curr)
 {
   double average = kqueue_get_average_size(prev, curr);
-  printf("Average kqueue length: %lf\n", average);
+  printf("%sAverage kqueue length: %lf\n", prefix, average);
 }
 
-void kqueue_print_average_wait_time(struct kqueue_stats *prev,
+void kqueue_print_average_wait_time(char *prefix,
+                                    struct kqueue_stats *prev,
                                     struct kqueue_stats *curr)
 {
   double average = kqueue_get_average_wait_time(prev, curr);
-  printf("Average wait time in kqueue: %lf\n", average);
+  printf("%sAverage wait time in kqueue: %lf\n", prefix, average);
 }
 

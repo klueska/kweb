@@ -97,12 +97,13 @@ struct proc_util cpu_util_get_average(struct cpu_util_stats *prev,
   return proc_util;
 }
 
-void cpu_util_print_average(struct cpu_util_stats *prev,
+void cpu_util_print_average(char *prefix,
+                            struct cpu_util_stats *prev,
                             struct cpu_util_stats *curr)
 {
   struct proc_util l = cpu_util_get_average(prev, curr);
-  printf("Average user cpu utilization: %lf\n", l.user);
-  printf("Average sys cpu utilization: %lf\n", l.sys);
-  printf("Average total cpu utilization: %lf\n", l.user + l.sys);
+  printf("%sAverage user cpu utilization: %lf\n", prefix, l.user);
+  printf("%sAverage sys cpu utilization: %lf\n", prefix, l.sys);
+  printf("%sAverage total cpu utilization: %lf\n", prefix, l.user + l.sys);
 }
 
