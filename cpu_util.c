@@ -92,8 +92,8 @@ struct proc_load cpu_util_get_average_load(struct cpu_util_stats *prev,
   double cpu_time = curr->cpu_time - prev->cpu_time;
   double proc_user_time = curr->proc_user_time - prev->proc_user_time;
   double proc_sys_time = curr->proc_sys_time - prev->proc_sys_time;
-  proc_load.user = 100*proc_user_time/cpu_time;
-  proc_load.sys = 100*proc_sys_time/cpu_time;
+  proc_load.user = cpu_time ? 100*proc_user_time/cpu_time : 0;
+  proc_load.sys = cpu_time ? 100*proc_sys_time/cpu_time : 0;
   return proc_load;
 }
 
