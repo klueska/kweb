@@ -1,7 +1,7 @@
 #ifndef KWEB_H
 #define KWEB_H
 
-#include "tpool.h"
+#include "request_queue.h"
 
 #define VERSION  "1.0"
 
@@ -15,6 +15,10 @@
 enum {
   REQ_NEW,
   REQ_ALIVE
+};
+
+struct server_stats {
+  uint64_t tsc_freq;
 };
 
 struct http_request {

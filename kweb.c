@@ -16,8 +16,11 @@
 
 //#define DEBUG
 #include "kweb.h"
+#include "tpool.h"
+#include "request_queue.h"
 #include "cpu_util.h"
 #include "ktimer.h"
+#include "tsc.h"
 
 static int listenfd;
 static struct ktimer ktimer;
@@ -31,6 +34,7 @@ static struct tpool_stats tpstats_prev = {0};
 static struct tpool_stats tpstats_curr = {0};
 static struct cpu_util_stats custats_prev = {0};
 static struct cpu_util_stats custats_curr = {0};
+static struct server_stats server_stats = {0};
 
 static void sig_int(int signo);
 static void sig_pipe(int signo);
@@ -147,12 +151,21 @@ static void reenqueue_or_complete(struct request_queue *q,
 
 static int intercept_url(char *url)
 {
-  if(!strncmp(url, "/start_timer", 12)) {
+  if(!strncmp(url, "/start_measurements", 12)) {
+    int period_ms = 1000;
+    printf("Started Measurements\n");
+    printf("Interval Length: %d\n", period_ms);
+    ktimer_init(&ktimer, period_ms, ktimer_callback, NULL);
     ktimer_start(&ktimer);
     return 1;
   }
-  if(!strncmp(url, "/stop_timer", 11)) {
+  if(!strncmp(url, "/stop_measurements", 11)) {
     ktimer_stop(&ktimer);
+    printf("Stopped Measurements\n");
+    return 1;
+  }
+  if(!strncmp(url, "/terminate", 11)) {
+    sig_int(SIGINT);
     return 1;
   }
   return 0;
@@ -390,15 +403,20 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  /* Start accepting requests and processing them */
-  fflush(stdout);
-  logger(LOG, "Starting kweb", argv[1], getpid());
-
+  /* Initialize necessary data structures */
   request_queue_init(&request_queue, sizeof(struct http_request));
   tpool_init(&tpool, tpool_size, &request_queue, http_server);
   cpu_util_init(&cpu_util);
-  ktimer_init(&ktimer, 1000, ktimer_callback, NULL);
 
+  /* Get the TSC frequency for our timestamp measurements */
+  server_stats.tsc_freq = get_tsc_freq();
+
+  /* Start accepting requests and processing them */
+  fflush(stdout);
+  logger(LOG, "Starting kweb", argv[1], getpid());
+  printf("Server Started\n");
+  printf("Thread Pool Size: %d\n", tpool.size);
+  printf("TSC Frequency: %llu\n", server_stats.tsc_freq);
   length = sizeof(cli_addr);
   for(;;) {
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
@@ -428,6 +446,7 @@ static void sig_int(int signo)
     cpu_util_fini(&cpu_util);
     close(listenfd);
     print_lifetime_statistics();
+    printf("Server Terminated\n");
     exit(0);
   }
 }
@@ -459,7 +478,7 @@ static void print_statistics(struct request_queue_stats *rqprev,
                              struct cpu_util_stats *cuprev,
                              struct cpu_util_stats *cucurr)
 {
-  printf("Thread Pool Size: %d\n", tpool.size);
+  printf("Timestamp: %llu\n", read_tsc());
   request_queue_print_total_enqueued(rqprev, rqcurr);
   tpool_print_requests_processed(tpprev, tpcurr);
   tpool_print_average_active_threads(tpprev, tpcurr);
@@ -473,7 +492,6 @@ static void print_interval_statistics()
 {
   printf("\n");
   printf("Interval Average Statistics:\n");
-  printf("Interval Length: %ld\n", ktimer.period_ms);
   print_statistics(&rqstats_prev, &rqstats_curr,
                    &tpstats_prev, &tpstats_curr,
                    &custats_prev, &custats_curr);
