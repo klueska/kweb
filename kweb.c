@@ -94,7 +94,6 @@ void http_server(struct request_queue *q, struct request *__r)
 
   /* Otherwise ...
    * Parse through the request, grabbing only what we care about */
-  logger(LOG, "Request", r->buffer, r->req.id);
   request_line = strtok_r(r->buffer, "\r\n", &saveptr);
 
   /* Make sure it's a GET operation */
@@ -104,6 +103,7 @@ void http_server(struct request_queue *q, struct request *__r)
     close(r->socketfd);
     return;
   }
+  logger(LOG, "Request", request_line, r->req.id);
 
   /* Strip all query data and the version info from the request_line */
   for(i=4; i<strlen(request_line); i++) {
