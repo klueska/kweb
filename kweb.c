@@ -199,7 +199,7 @@ void http_server(struct request_queue *q, struct request *__r)
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
     logger(FORBIDDEN, "Only simple GET operation supported", request_line, r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
-    close(r->socketfd);
+    reenqueue_or_complete(q, r);
     return;
   }
   logger(LOG, "Request", request_line, r->req.id);
@@ -237,7 +237,7 @@ void http_server(struct request_queue *q, struct request *__r)
     if(request_line[j] == '.' && request_line[j+1] == '.') {
       logger(FORBIDDEN, "Parent directory (..) path names not supported", request_line, r->socketfd);
       write(r->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
-      close(r->socketfd);
+      reenqueue_or_complete(q, r);
       return;
     }
   }
@@ -259,7 +259,7 @@ void http_server(struct request_queue *q, struct request *__r)
   if(fstr == 0) {
     logger(FORBIDDEN, "File extension type not supported", request_line, r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
-    close(r->socketfd);
+    reenqueue_or_complete(q, r);
     return;
   }
 
@@ -267,7 +267,7 @@ void http_server(struct request_queue *q, struct request *__r)
   if((file_fd = open(&request_line[5], O_RDONLY)) == -1) {
     logger(NOTFOUND, "Failed to open file", &request_line[5], r->socketfd);
     write(r->socketfd, page_data[NOTFOUND_PAGE], strlen(page_data[NOTFOUND_PAGE]));
-    close(r->socketfd);
+    reenqueue_or_complete(q, r);
     return;
   }
 
@@ -285,12 +285,8 @@ void http_server(struct request_queue *q, struct request *__r)
 
   /* Send the file itself in 8KB chunks - last block may be smaller */
   while((ret = read(file_fd, r->obuf, sizeof(r->obuf))) > 0) {
-    if(write(r->socketfd, r->obuf, ret) < 0) {
+    if(write(r->socketfd, r->obuf, ret) < 0)
       logger(LOG, "Write error on socket.", "", r->socketfd);
-      close(file_fd);
-      close(r->socketfd);
-      return;
-    }
   }
   close(file_fd);
   reenqueue_or_complete(q, r);
