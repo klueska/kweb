@@ -491,7 +491,7 @@ static void print_statistics(struct request_queue_stats *rqprev,
 static void print_interval_statistics()
 {
   printf("\n");
-  printf("Interval Average Statistics:\n");
+  printf("Interval Statistics:\n");
   print_statistics(&rqstats_prev, &rqstats_curr,
                    &tpstats_prev, &tpstats_curr,
                    &custats_prev, &custats_curr);
@@ -500,7 +500,7 @@ static void print_interval_statistics()
 static void print_lifetime_statistics()
 {
   printf("\n");
-  printf("Lifetime Average Statistics:\n");
+  printf("Lifetime Statistics:\n");
   print_statistics(&((struct request_queue_stats){0}), &rqstats_curr,
                    &((struct tpool_stats){0}), &tpstats_curr,
                    &((struct cpu_util_stats){0}), &custats_curr);
