@@ -426,11 +426,11 @@ static void print_statistics(struct request_queue_stats *rqprev,
                              struct cpu_util_stats *cucurr)
 {
   printf("Thread Pool Size: %d\n", tpool.size);
+  request_queue_print_total_enqueued(rqprev, rqcurr);
+  tpool_print_requests_processed(tpprev, tpcurr);
   tpool_print_average_active_threads(tpprev, tpcurr);
   request_queue_print_average_size(rqprev, rqcurr);
-  request_queue_print_total_enqueued(rqprev, rqcurr);
   request_queue_print_average_wait_time(rqprev, rqcurr);
-  tpool_print_requests_processed(tpprev, tpcurr);
   tpool_print_average_processing_time(tpprev, tpcurr);
   cpu_util_print_average_load(cuprev, cucurr);
 }
