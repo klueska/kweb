@@ -7,7 +7,7 @@
 
 struct kitem {
   SIMPLEQ_ENTRY(kitem) link;
-  long id;
+  unsigned long id;
   uint64_t enqueue_time;
   uint64_t dequeue_time;
 };
@@ -23,7 +23,7 @@ struct kqueue_stats {
 SIMPLEQ_HEAD(__kqueue, kitem);
 struct kqueue {
   int item_size;
-  long ids;
+  unsigned long ids;
 
   spinlock_t lock;
   struct __kqueue queue;
