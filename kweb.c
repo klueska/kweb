@@ -88,11 +88,6 @@ static int extract_request(char *dst, char *src, int max_len)
 
 static long buffer_next_or_finish(struct http_request *r)
 {
-  /* Shift the read buffer back to the beginning if there is an offset to
-   * process left over from the last read */
-  if(r->ibuf_length > 0)
-    memmove(r->ibuf, &r->ibuf[r->rbuf_length], r->ibuf_length);
-
   int ret = 0;
   while(1) {
     int len = extract_request(r->rbuf, r->ibuf, r->ibuf_length);
@@ -100,6 +95,7 @@ static long buffer_next_or_finish(struct http_request *r)
       r->rbuf[len] = '\0';
       r->rbuf_length = len;
       r->ibuf_length = r->ibuf_length - len;
+      memmove(r->ibuf, &r->ibuf[r->rbuf_length], r->ibuf_length);
       return len;
     }
     ret = read(r->socketfd, &r->ibuf[r->ibuf_length],
