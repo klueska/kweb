@@ -125,7 +125,7 @@ static int buffer_next_or_die(struct http_request *r)
     case REQ_NEW:
       /* Fail on a new request, and send back a FORBIDDEN error */
       logger(FORBIDDEN, "Failed to read browser request", "", r->socketfd);
-      write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+      write(r->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
       break;
     case REQ_ALIVE:
 	  /* On a reenqueued request, it is OK for ret to return either no bytes or
@@ -217,9 +217,8 @@ void http_server(struct request_queue *q, struct request *__r)
   if(intercept_url(&request_line[4])) {
     /* Send the necessary header info + a blank line */
     sprintf(r->obuf, page_data[OK_HEADER], VERSION, 0, "text/plain");
-    logger(LOG, "INTERCEPT URL", url, r->req.id);
+    logger(LOG, "INTERCEPT URL", &request_line[4], r->req.id);
     write(r->socketfd, r->obuf, strlen(r->obuf));
-
     reenqueue_or_complete(q, r);
     return;
   }
