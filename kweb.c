@@ -351,8 +351,8 @@ int main(int argc, char **argv)
   /* Change to the specified ROOT directory to set it as the ROOT of the fs */
   if(argc == 4) {
     tpool_size = atoi(argv[3]);
-    if(tpool_size < 0 || tpool_size > INT_MAX) { 
-      printf("ERROR: Invalid tpool size %d\n", tpool_size);
+    if(tpool_size < 1 || tpool_size > INT_MAX) { 
+      printf("ERROR: Invalid tpool size %d. Must be >= 1.\n", tpool_size);
       exit(1);
     }
   }
@@ -424,12 +424,8 @@ int main(int argc, char **argv)
       r->socketfd = socketfd;
       r->req_length = 0;
       r->ibuf_length = 0;
-      if(tpool_size == 0)
-        http_server(&request_queue, &r->req);
-      else {
-        request_queue_enqueue_request(&request_queue, &r->req);
-        tpool_wake(&tpool, 1);
-      }
+      request_queue_enqueue_request(&request_queue, &r->req);
+      tpool_wake(&tpool, 1);
     }
   }
 }
