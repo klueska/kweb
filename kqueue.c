@@ -1,9 +1,10 @@
 #include <malloc.h>
-#include "request_queue.h"
+#include "kqueue.h"
+#include "tsc.h"
 
-void request_queue_init(struct request_queue *q, int request_size)
+void kqueue_init(struct kqueue *q, int item_size)
 {
-  q->request_size = request_size;
+  q->item_size = item_size;
 
   SIMPLEQ_INIT(&q->queue);
   spinlock_init(&q->lock);
@@ -22,10 +23,10 @@ void request_queue_init(struct request_queue *q, int request_size)
   q->zombie_qstats.wait_time_sum = 0;
 }
 
-void *request_queue_create_request(struct request_queue *q)
+void *kqueue_create_item(struct kqueue *q)
 {
   spinlock_lock(&q->zombie_lock);
-  struct request *r = SIMPLEQ_FIRST(&q->zombie_queue);
+  struct kitem *r = SIMPLEQ_FIRST(&q->zombie_queue);
   if(r) {
     SIMPLEQ_REMOVE_HEAD(&q->zombie_queue, link);
     r->dequeue_time = read_tsc();
@@ -36,7 +37,7 @@ void *request_queue_create_request(struct request_queue *q)
   spinlock_unlock(&q->zombie_lock);
 
   if(r == NULL) {
-    r = malloc(q->request_size);
+    r = malloc(q->item_size);
   }
   r->id = 0;
   r->enqueue_time = 0;
@@ -44,7 +45,7 @@ void *request_queue_create_request(struct request_queue *q)
   return r;
 }
 
-void request_queue_destroy_request(struct request_queue *q, struct request *r)
+void kqueue_destroy_item(struct kqueue *q, struct kitem *r)
 {
   spinlock_lock(&q->zombie_lock);
   q->zombie_qstats.size_sum += q->zombie_qstats.size++;
@@ -54,7 +55,7 @@ void request_queue_destroy_request(struct request_queue *q, struct request *r)
   spinlock_unlock(&q->zombie_lock);
 }
 
-void request_queue_enqueue_request(struct request_queue *q, struct request *r)
+void kqueue_enqueue_item(struct kqueue *q, struct kitem *r)
 {
   spinlock_lock(&q->lock);
   q->qstats.size_sum += q->qstats.size++;
@@ -64,10 +65,10 @@ void request_queue_enqueue_request(struct request_queue *q, struct request *r)
   spinlock_unlock(&q->lock);
 }
 
-struct request *request_queue_dequeue_request(struct request_queue *q)
+struct kitem *kqueue_dequeue_item(struct kqueue *q)
 {
   spinlock_lock(&q->lock);
-  struct request *r = SIMPLEQ_FIRST(&q->queue);
+  struct kitem *r = SIMPLEQ_FIRST(&q->queue);
   if(r) {
     SIMPLEQ_REMOVE_HEAD(&q->queue, link);
     r->dequeue_time = read_tsc();
@@ -79,54 +80,54 @@ struct request *request_queue_dequeue_request(struct request_queue *q)
   return r;
 }
 
-struct request_queue_stats request_queue_get_stats(struct request_queue *q)
+struct kqueue_stats kqueue_get_stats(struct kqueue *q)
 {
   spinlock_lock(&q->lock);
-  struct request_queue_stats s = q->qstats;
+  struct kqueue_stats s = q->qstats;
   spinlock_unlock(&q->lock);
   return s;
 }
 
-double request_queue_get_average_size(struct request_queue_stats *prev,
-                                      struct request_queue_stats *curr)
+double kqueue_get_average_size(struct kqueue_stats *prev,
+                               struct kqueue_stats *curr)
 {
   int total_enqueued = curr->total_enqueued - prev->total_enqueued; 
   double size_sum = curr->size_sum - prev->size_sum; 
   return total_enqueued ? size_sum/total_enqueued : 0;
 }
 
-int request_queue_get_total_enqueued(struct request_queue_stats *prev,
-                                     struct request_queue_stats *curr)
+int kqueue_get_total_enqueued(struct kqueue_stats *prev,
+                              struct kqueue_stats *curr)
 {
   return curr->total_enqueued - prev->total_enqueued; 
 }
 
-double request_queue_get_average_wait_time(struct request_queue_stats *prev,
-                                           struct request_queue_stats *curr)
+double kqueue_get_average_wait_time(struct kqueue_stats *prev,
+                                    struct kqueue_stats *curr)
 {
   double wait_time_sum = curr->wait_time_sum - prev->wait_time_sum;
   uint64_t total_dequeued = curr->total_dequeued - prev->total_dequeued;
   return total_dequeued ? wait_time_sum/total_dequeued : 0;
 }
 
-void request_queue_print_total_enqueued(struct request_queue_stats *prev,
-                                        struct request_queue_stats *curr)
+void kqueue_print_total_enqueued(struct kqueue_stats *prev,
+                                 struct kqueue_stats *curr)
 {
-  int total_enqueued = request_queue_get_total_enqueued(prev, curr);
-  printf("Total requests enqueued: %d\n", total_enqueued);
+  int total_enqueued = kqueue_get_total_enqueued(prev, curr);
+  printf("Total items enqueued: %d\n", total_enqueued);
 }
 
-void request_queue_print_average_size(struct request_queue_stats *prev,
-                                      struct request_queue_stats *curr)
+void kqueue_print_average_size(struct kqueue_stats *prev,
+                               struct kqueue_stats *curr)
 {
-  double average = request_queue_get_average_size(prev, curr);
-  printf("Average request queue length: %lf\n", average);
+  double average = kqueue_get_average_size(prev, curr);
+  printf("Average kqueue length: %lf\n", average);
 }
 
-void request_queue_print_average_wait_time(struct request_queue_stats *prev,
-                                           struct request_queue_stats *curr)
+void kqueue_print_average_wait_time(struct kqueue_stats *prev,
+                                    struct kqueue_stats *curr)
 {
-  double average = request_queue_get_average_wait_time(prev, curr);
-  printf("Average wait time in request queue: %lf\n", average);
+  double average = kqueue_get_average_wait_time(prev, curr);
+  printf("Average wait time in kqueue: %lf\n", average);
 }
 

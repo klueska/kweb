@@ -14,22 +14,22 @@
 #include <pthread.h>
 #include <signal.h>
 
-//#define DEBUG
+#define DEBUG
 #include "kweb.h"
 #include "tpool.h"
-#include "request_queue.h"
+#include "kqueue.h"
 #include "cpu_util.h"
 #include "ktimer.h"
 #include "tsc.h"
 
 static int listenfd;
 static struct ktimer ktimer;
-static struct request_queue request_queue;
+static struct kqueue kqueue;
 static struct tpool tpool;
 static struct cpu_util cpu_util;
 
-static struct request_queue_stats rqstats_prev = {0};
-static struct request_queue_stats rqstats_curr = {0};
+static struct kqueue_stats rqstats_prev = {0};
+static struct kqueue_stats rqstats_curr = {0};
 static struct tpool_stats tpstats_prev = {0};
 static struct tpool_stats tpstats_curr = {0};
 static struct cpu_util_stats custats_prev = {0};
@@ -140,13 +140,13 @@ static int buffer_next_or_die(struct http_request *r)
   return ret;
 }
 
-static void reenqueue_or_complete(struct request_queue *q,
+static void reenqueue_or_complete(struct kqueue *q,
                                   struct http_request *r)
 {
   if(buffer_next_or_die(r) > 0)
-    request_queue_enqueue_request(q, &r->req);
+    kqueue_enqueue_item(q, &r->req);
   else
-    request_queue_destroy_request(q, &r->req);
+    kqueue_destroy_item(q, &r->req);
 }
 
 static int intercept_url(char *url)
@@ -172,9 +172,9 @@ static int intercept_url(char *url)
 }
 
 /* This is a child web server thread */
-void http_server(struct request_queue *q, struct request *__r)
+void http_server(struct kqueue *q, struct kitem *ki)
 {
-  struct http_request *r = (struct http_request *)__r;
+  struct http_request *r = (struct http_request *)ki;
   int j, file_fd, buflen;
   long i = 0, ret = 0, len = 0;
   char *fstr;
@@ -185,7 +185,7 @@ void http_server(struct request_queue *q, struct request *__r)
    * or destroy it and return if that is unsuccessful. */
   if(r->state == REQ_NEW) {
     if(buffer_next_or_die(r) <= 0) {
-      request_queue_destroy_request(q, &r->req);
+      kqueue_destroy_item(q, &r->req);
       return;
     }
   }
@@ -399,8 +399,8 @@ int main(int argc, char **argv)
   }
 
   /* Initialize necessary data structures */
-  request_queue_init(&request_queue, sizeof(struct http_request));
-  tpool_init(&tpool, tpool_size, &request_queue, http_server);
+  kqueue_init(&kqueue, sizeof(struct http_request));
+  tpool_init(&tpool, tpool_size, &kqueue, http_server);
   cpu_util_init(&cpu_util);
 
   /* Get the TSC frequency for our timestamp measurements */
@@ -419,12 +419,12 @@ int main(int argc, char **argv)
     }
     else {
       struct http_request *r;
-      r = request_queue_create_request(&request_queue);
+      r = kqueue_create_item(&kqueue);
       r->state = REQ_NEW;
       r->socketfd = socketfd;
       r->req_length = 0;
       r->ibuf_length = 0;
-      request_queue_enqueue_request(&request_queue, &r->req);
+      kqueue_enqueue_item(&kqueue, &r->req);
       tpool_wake(&tpool, 1);
     }
   }
@@ -455,26 +455,26 @@ static void ktimer_callback(void *arg)
   tpstats_prev = tpstats_curr;
   custats_prev = custats_curr;
 
-  rqstats_curr = request_queue_get_stats(&request_queue);
+  rqstats_curr = kqueue_get_stats(&kqueue);
   tpstats_curr = tpool_get_stats(&tpool);
   custats_curr = cpu_util_get_stats(&cpu_util);
 
   print_interval_statistics();
 }
 
-static void print_statistics(struct request_queue_stats *rqprev,
-                             struct request_queue_stats *rqcurr,
+static void print_statistics(struct kqueue_stats *rqprev,
+                             struct kqueue_stats *rqcurr,
                              struct tpool_stats *tpprev,
                              struct tpool_stats *tpcurr,
                              struct cpu_util_stats *cuprev,
                              struct cpu_util_stats *cucurr)
 {
   printf("Timestamp: %llu\n", read_tsc());
-  request_queue_print_total_enqueued(rqprev, rqcurr);
-  tpool_print_requests_processed(tpprev, tpcurr);
+  kqueue_print_total_enqueued(rqprev, rqcurr);
+  tpool_print_items_processed(tpprev, tpcurr);
   tpool_print_average_active_threads(tpprev, tpcurr);
-  request_queue_print_average_size(rqprev, rqcurr);
-  request_queue_print_average_wait_time(rqprev, rqcurr);
+  kqueue_print_average_size(rqprev, rqcurr);
+  kqueue_print_average_wait_time(rqprev, rqcurr);
   tpool_print_average_processing_time(tpprev, tpcurr);
   cpu_util_print_average(cuprev, cucurr);
 }
@@ -492,7 +492,7 @@ static void print_lifetime_statistics()
 {
   printf("\n");
   printf("Lifetime Statistics:\n");
-  print_statistics(&((struct request_queue_stats){0}), &rqstats_curr,
+  print_statistics(&((struct kqueue_stats){0}), &rqstats_curr,
                    &((struct tpool_stats){0}), &tpstats_curr,
                    &((struct cpu_util_stats){0}), &custats_curr);
 }

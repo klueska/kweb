@@ -1,7 +1,7 @@
 #ifndef KWEB_H
 #define KWEB_H
 
-#include "request_queue.h"
+#include "kqueue.h"
 
 #define VERSION  "1.0"
 
@@ -22,7 +22,7 @@ struct server_stats {
 };
 
 struct http_request {
-  struct request req;
+  struct kitem req;
   int socketfd;
   int state;
   int req_length;
