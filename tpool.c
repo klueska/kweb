@@ -60,7 +60,7 @@ int tpool_init(struct tpool *t, int size, struct kqueue *q,
   pthread_t thread;
   pthread_attr_t attr;
   pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN);
+  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN*4);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   for(int i=0; i<size; i++) {
     if(pthread_create(&thread, &attr, __thread_wrapper, t) == 0)
