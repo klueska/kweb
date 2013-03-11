@@ -179,7 +179,14 @@ void web(int fd, int hit)
 	while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
 		write(fd, buffer, ret);
 	}
-	sleep(1);	/* allow socket to drain before signalling the socket is closed */
+	/* allow socket to drain before signalling the socket is closed */
+	shutdown(fd, SHUT_WR);
+	for(;;) {
+		int res = read(fd, buffer, 4000);
+        if(res < 0)
+			logger(ERROR, "Connection reset by peer.", buffer, hit);
+		break;
+	}
 	close(fd);
 }
 
