@@ -219,10 +219,7 @@ int main(int argc, char **argv)
 		printf("ERROR: Can't Change to directory %s\n",argv[2]);
 		exit(4);
 	}
-
-	/* close open files */
-	for(i=0;i<32;i++)
-		(void)close(i);
+	fflush(stdout);
 	logger(LOG, "nweb starting", argv[1], getpid());
 
 	/* setup the network socket */
