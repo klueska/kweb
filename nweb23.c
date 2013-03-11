@@ -9,10 +9,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#define VERSION 23
-#define BUFSIZE 8096
+
+#define VERSION    23
+
 #define ERROR      42
 #define LOG        44
+#define BUFSIZE	 8096
+
 #define FORBIDDEN 403
 #define NOTFOUND  404
 
@@ -36,8 +39,9 @@ struct {
 enum {
   FORBIDDEN_PAGE,
   NOTFOUND_PAGE,
+  OK_HEADER,
 };
-char *error_page[] = {
+char *page_data[] = {
 	"HTTP/1.1 403 Forbidden\n"
     "Content-Length: 185\n"
     "Connection: close\n"
@@ -58,7 +62,13 @@ char *error_page[] = {
     "</head><body>\n"
     "<h1>Not Found</h1>\n"
     "The requested URL was not found on this server.\n"
-    "</body></html>\n"
+    "</body></html>\n",
+
+	"HTTP/1.1 200 OK\n"
+    "Server: nweb/%d.0\n"
+    "Content-Length: %ld\n"
+    "Connection: close\n"
+    "Content-Type: %s\n\n"
 };
 
 void logger(int type, char *s1, char *s2, int socket_fd)
@@ -67,25 +77,30 @@ void logger(int type, char *s1, char *s2, int socket_fd)
 	char logbuffer[BUFSIZE*2];
 
 	switch (type) {
-	case ERROR: (void)sprintf(logbuffer,"ERROR: %s:%s Errno=%d exiting pid=%d",s1, s2, errno,getpid()); 
-		break;
-	case FORBIDDEN: 
-		(void)write(socket_fd, error_page[FORBIDDEN_PAGE], 271);
-		(void)sprintf(logbuffer,"FORBIDDEN: %s:%s",s1, s2); 
-		break;
-	case NOTFOUND: 
-		(void)write(socket_fd, error_page[NOTFOUND_PAGE], 224);
-		(void)sprintf(logbuffer,"NOT FOUND: %s:%s",s1, s2); 
-		break;
-	case LOG: (void)sprintf(logbuffer," INFO: %s:%s:%d",s1, s2,socket_fd); break;
+		case ERROR:
+            sprintf(logbuffer,"ERROR: %s:%s Errno=%d exiting pid=%d",
+                    s1, s2, errno, getpid()); 
+			break;
+		case FORBIDDEN: 
+			write(socket_fd, page_data[FORBIDDEN_PAGE], 271);
+			sprintf(logbuffer,"FORBIDDEN: %s:%s", s1, s2); 
+			break;
+		case NOTFOUND: 
+			write(socket_fd, page_data[NOTFOUND_PAGE], 224);
+			sprintf(logbuffer,"NOT FOUND: %s:%s", s1, s2); 
+			break;
+		case LOG:
+			sprintf(logbuffer," INFO: %s:%s:%d", s1, s2, socket_fd);
+            break;
 	}	
 	/* No checks here, nothing can be done with a failure anyway */
-	if((fd = open("nweb.log", O_CREAT| O_WRONLY | O_APPEND,0644)) >= 0) {
-		(void)write(fd,logbuffer,strlen(logbuffer)); 
-		(void)write(fd,"\n",1);      
-		(void)close(fd);
+	if((fd = open("nweb.log", O_CREAT| O_WRONLY | O_APPEND, 0644)) >= 0) {
+		write(fd, logbuffer, strlen(logbuffer)); 
+		write(fd, "\n", 1);      
+		close(fd);
 	}
-	if(type == ERROR || type == NOTFOUND || type == FORBIDDEN) exit(3);
+	if(type == ERROR || type == NOTFOUND || type == FORBIDDEN)
+      exit(3);
 }
 
 /* this is a child web server process, so we can exit on errors */
@@ -96,58 +111,75 @@ void web(int fd, int hit)
 	char * fstr;
 	static char buffer[BUFSIZE+1]; /* static so zero filled */
 
-	ret =read(fd,buffer,BUFSIZE); 	/* read Web request in one go */
+	ret =read(fd, buffer, BUFSIZE); 	/* read Web request in one go */
 	if(ret == 0 || ret == -1) {	/* read failure stop now */
-		logger(FORBIDDEN,"failed to read browser request","",fd);
+		logger(FORBIDDEN, "failed to read browser request", "", fd);
 	}
+
 	if(ret > 0 && ret < BUFSIZE)	/* return code is valid chars */
 		buffer[ret]=0;		/* terminate the buffer */
-	else buffer[0]=0;
-	for(i=0;i<ret;i++)	/* remove CF and LF characters */
+	else
+      buffer[0]=0;
+
+	for(i=0; i<ret; i++)	/* remove CF and LF characters */
 		if(buffer[i] == '\r' || buffer[i] == '\n')
 			buffer[i]='*';
-	logger(LOG,"request",buffer,hit);
-	if( strncmp(buffer,"GET ",4) && strncmp(buffer,"get ",4) ) {
-		logger(FORBIDDEN,"Only simple GET operation supported",buffer,fd);
+
+	logger(LOG, "request", buffer, hit);
+	if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4) ) {
+		logger(FORBIDDEN,"Only simple GET operation supported", buffer, fd);
 	}
-	for(i=4;i<BUFSIZE;i++) { /* null terminate after the second space to ignore extra stuff */
+
+	for(i=4; i<BUFSIZE; i++) { /* null terminate after the second space to ignore extra stuff */
 		if(buffer[i] == ' ') { /* string is "GET URL " +lots of other stuff */
 			buffer[i] = 0;
 			break;
 		}
 	}
-	for(j=0;j<i-1;j++) 	/* check for illegal parent directory use .. */
+
+ 	/* check for illegal parent directory use .. */
+	for(j=0; j<i-1; j++) {
 		if(buffer[j] == '.' && buffer[j+1] == '.') {
 			logger(FORBIDDEN,"Parent directory (..) path names not supported",buffer,fd);
 		}
-	if( !strncmp(&buffer[0],"GET /\0",6) || !strncmp(&buffer[0],"get /\0",6) ) /* convert no filename to index file */
+	}
+
+	/* convert no filename to index file */
+	if(!strncmp(&buffer[0],"GET /\0",6) || !strncmp(&buffer[0],"get /\0",6))
 		(void)strcpy(buffer,"GET /index.html");
 
 	/* work out the file type and check we support it */
 	buflen=strlen(buffer);
 	fstr = (char *)0;
-	for(i=0;extensions[i].ext != 0;i++) {
+	for(i=0; extensions[i].ext != 0; i++) {
 		len = strlen(extensions[i].ext);
-		if( !strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
+		if(!strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
 			fstr =extensions[i].filetype;
 			break;
 		}
 	}
-	if(fstr == 0) logger(FORBIDDEN,"file extension type not supported",buffer,fd);
+	if(fstr == 0) {
+		logger(FORBIDDEN,"file extension type not supported", buffer, fd);
+	}
 
-	if(( file_fd = open(&buffer[5],O_RDONLY)) == -1) {  /* open the file for reading */
+	/* open the file for reading */
+	if((file_fd = open(&buffer[5],O_RDONLY)) == -1) {
 		logger(NOTFOUND, "failed to open file",&buffer[5],fd);
 	}
-	logger(LOG,"SEND",&buffer[5],hit);
-	len = (long)lseek(file_fd, (off_t)0, SEEK_END); /* lseek to the file end to find the length */
-	      (void)lseek(file_fd, (off_t)0, SEEK_SET); /* lseek back to the file start ready for reading */
-          (void)sprintf(buffer,"HTTP/1.1 200 OK\nServer: nweb/%d.0\nContent-Length: %ld\nConnection: close\nContent-Type: %s\n\n", VERSION, len, fstr); /* Header + a blank line */
-	logger(LOG,"Header",buffer,hit);
-	(void)write(fd,buffer,strlen(buffer));
+
+	logger(LOG, "SEND", &buffer[5], hit);
+ 	/* lseek to the file end to find the length */
+	len = lseek(file_fd, (off_t)0, SEEK_END);
+ 	/* lseek back to the file start ready for reading */
+	lseek(file_fd, (off_t)0, SEEK_SET);
+
+    sprintf(buffer, page_data[OK_HEADER], VERSION, len, fstr); /* Header + a blank line */
+	logger(LOG, "Header", buffer, hit);
+	write(fd, buffer, strlen(buffer));
 
 	/* send file in 8KB block - last block may be smaller */
-	while (	(ret = read(file_fd, buffer, BUFSIZE)) > 0 ) {
-		(void)write(fd,buffer,ret);
+	while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
+		write(fd,buffer,ret);
 	}
 	sleep(1);	/* allow socket to drain before signalling the socket is closed */
 	close(fd);
@@ -219,10 +251,10 @@ int main(int argc, char **argv)
 		}
 		else {
 			if(pid == 0) { 	/* child */
-				(void)close(listenfd);
-				web(socketfd,hit); /* never returns */
+				close(listenfd);
+				web(socketfd, hit); /* never returns */
 			} else { 	/* parent */
-				(void)close(socketfd);
+				close(socketfd);
 			}
 		}
 	}
