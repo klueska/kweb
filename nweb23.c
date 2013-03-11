@@ -73,7 +73,7 @@ char *page_data[] = {
 
 void logger(int type, char *s1, char *s2, int socket_fd)
 {
-	int fd ;
+	int fd;
 	char logbuffer[BUFSIZE*2];
 
 	switch (type) {
@@ -220,15 +220,12 @@ int main(int argc, char **argv)
 		(void)printf("ERROR: Can't Change to directory %s\n",argv[2]);
 		exit(4);
 	}
-	/* Become deamon + unstopable and no zombies children (= no wait()) */
-	if(fork() != 0)
-		return 0; /* parent returns OK to shell */
-	(void)signal(SIGCLD, SIG_IGN); /* ignore child death */
-	(void)signal(SIGHUP, SIG_IGN); /* ignore terminal hangups */
+
+	/* close open files */
 	for(i=0;i<32;i++)
-		(void)close(i);		/* close open files */
-	(void)setpgrp();		/* break away from process group */
+		(void)close(i);
 	logger(LOG,"nweb starting",argv[1],getpid());
+
 	/* setup the network socket */
 	if((listenfd = socket(AF_INET, SOCK_STREAM,0)) <0)
 		logger(ERROR, "system call","socket",0);
@@ -242,6 +239,7 @@ int main(int argc, char **argv)
 		logger(ERROR,"system call","bind",0);
 	if( listen(listenfd,64) <0)
 		logger(ERROR,"system call","listen",0);
+
 	for(hit=1; ;hit++) {
 		length = sizeof(cli_addr);
 		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0)
