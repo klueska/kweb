@@ -94,7 +94,7 @@ void logger(int type, char *s1, char *s2, int socket_fd)
             break;
 	}	
 	/* No checks here, nothing can be done with a failure anyway */
-	if((fd = open("nweb.log", O_CREAT| O_WRONLY | O_APPEND, 0644)) >= 0) {
+	if((fd = open("nweb.log", O_CREAT | O_WRONLY | O_APPEND, 0644)) >= 0) {
 		write(fd, logbuffer, strlen(logbuffer)); 
 		write(fd, "\n", 1);      
 		close(fd);
@@ -179,7 +179,7 @@ void web(int fd, int hit)
 
 	/* send file in 8KB block - last block may be smaller */
 	while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
-		write(fd,buffer,ret);
+		write(fd, buffer, ret);
 	}
 	sleep(1);	/* allow socket to drain before signalling the socket is closed */
 	close(fd);
@@ -212,18 +212,18 @@ int main(int argc, char **argv)
 	    !strncmp(argv[2],"/bin",5 ) || !strncmp(argv[2],"/lib", 5 ) ||
 	    !strncmp(argv[2],"/tmp",5 ) || !strncmp(argv[2],"/usr", 5 ) ||
 	    !strncmp(argv[2],"/dev",5 ) || !strncmp(argv[2],"/sbin",6) ){
-		(void)printf("ERROR: Bad top directory %s, see nweb -?\n",argv[2]);
+		printf("ERROR: Bad top directory %s, see nweb -?\n",argv[2]);
 		exit(3);
 	}
 	if(chdir(argv[2]) == -1){ 
-		(void)printf("ERROR: Can't Change to directory %s\n",argv[2]);
+		printf("ERROR: Can't Change to directory %s\n",argv[2]);
 		exit(4);
 	}
 
 	/* close open files */
 	for(i=0;i<32;i++)
 		(void)close(i);
-	logger(LOG,"nweb starting",argv[1],getpid());
+	logger(LOG, "nweb starting", argv[1], getpid());
 
 	/* setup the network socket */
 	if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -231,15 +231,15 @@ int main(int argc, char **argv)
 
 	port = atoi(argv[1]);
 	if(port < 0 || port >60000)
-		logger(ERROR,"Invalid port number (try 1->60000)", argv[1], 0);
+		logger(ERROR, "Invalid port number (try 1->60000)", argv[1], 0);
 
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(port);
 	if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-		logger(ERROR,"system call", "bind", 0);
-	if(listen(listenfd,64) < 0)
-		logger(ERROR,"system call", "listen", 0);
+		logger(ERROR, "system call", "bind", 0);
+	if(listen(listenfd, 64) < 0)
+		logger(ERROR, "system call", "listen", 0);
 
 	for(hit=1; ;hit++) {
 		length = sizeof(cli_addr);
