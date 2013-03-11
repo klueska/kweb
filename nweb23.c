@@ -227,25 +227,27 @@ int main(int argc, char **argv)
 	logger(LOG,"nweb starting",argv[1],getpid());
 
 	/* setup the network socket */
-	if((listenfd = socket(AF_INET, SOCK_STREAM,0)) <0)
-		logger(ERROR, "system call","socket",0);
+	if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		logger(ERROR, "system call", "socket", 0);
+
 	port = atoi(argv[1]);
 	if(port < 0 || port >60000)
-		logger(ERROR,"Invalid port number (try 1->60000)",argv[1],0);
+		logger(ERROR,"Invalid port number (try 1->60000)", argv[1], 0);
+
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serv_addr.sin_port = htons(port);
-	if(bind(listenfd, (struct sockaddr *)&serv_addr,sizeof(serv_addr)) <0)
-		logger(ERROR,"system call","bind",0);
-	if( listen(listenfd,64) <0)
-		logger(ERROR,"system call","listen",0);
+	if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+		logger(ERROR,"system call", "bind", 0);
+	if(listen(listenfd,64) < 0)
+		logger(ERROR,"system call", "listen", 0);
 
 	for(hit=1; ;hit++) {
 		length = sizeof(cli_addr);
 		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0)
-			logger(ERROR,"system call","accept",0);
+			logger(ERROR,"system call", "accept", 0);
 		if((pid = fork()) < 0) {
-			logger(ERROR,"system call","fork",0);
+			logger(ERROR,"system call", "fork", 0);
 		}
 		else {
 			if(pid == 0) { 	/* child */
