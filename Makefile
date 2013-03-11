@@ -1,2 +1,2 @@
 all:
-	gcc nweb23.c -o nweb
+	gcc nweb23.c -o nweb -lpthread

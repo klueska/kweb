@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 
 #define VERSION    23
 
@@ -18,6 +19,11 @@
 
 #define FORBIDDEN 403
 #define NOTFOUND  404
+
+struct thread_params {
+	int fd;
+	int hit;
+};
 
 struct {
 	char *ext;
@@ -102,8 +108,11 @@ void logger(int type, char *s1, char *s2, int socket_fd)
 }
 
 /* this is a child web server process, so we can exit on errors */
-void web(int fd, int hit)
+void *web(void *__p)
 {
+	struct thread_params *p = __p;
+	int fd = p->fd;
+	int hit = p->hit;
 	int j, file_fd, buflen;
 	long i, ret, len;
 	char * fstr;
@@ -249,7 +258,14 @@ int main(int argc, char **argv)
 			logger(ERROR, "system call", "accept", 0);
 		}
 		else {
-			web(socketfd, hit);
+			pthread_t thread;
+			pthread_attr_t attr;
+			pthread_attr_init(&attr);
+			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+			struct thread_params *p = malloc(sizeof(struct thread_params));
+			p->fd = socketfd;
+			p->hit = hit;
+			pthread_create(&thread, &attr, web, p);
 		}
 	}
 }
