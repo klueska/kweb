@@ -30,7 +30,36 @@ struct {
 	{"tar", "image/tar" },  
 	{"htm", "text/html" },  
 	{"html","text/html" },  
-	{0,0} };
+	{0,0}
+};
+
+enum {
+  FORBIDDEN_PAGE,
+  NOTFOUND_PAGE,
+};
+char *error_page[] = {
+	"HTTP/1.1 403 Forbidden\n"
+    "Content-Length: 185\n"
+    "Connection: close\n"
+    "Content-Type: text/html\n\n"
+    "<html><head>\n"
+    "<title>403 Forbidden</title>\n"
+    "</head><body>\n"
+    "<h1>Forbidden</h1>\n"
+    "The requested URL, file type or operation is not allowed on this simple static file webserver.\n"
+    "</body></html>\n",
+
+	"HTTP/1.1 404 Not Found\n"
+    "Content-Length: 136\n"
+    "Connection: close\n"
+    "Content-Type: text/html\n\n"
+    "<html><head>\n"
+    "<title>404 Not Found</title>\n"
+    "</head><body>\n"
+    "<h1>Not Found</h1>\n"
+    "The requested URL was not found on this server.\n"
+    "</body></html>\n"
+};
 
 void logger(int type, char *s1, char *s2, int socket_fd)
 {
@@ -41,11 +70,11 @@ void logger(int type, char *s1, char *s2, int socket_fd)
 	case ERROR: (void)sprintf(logbuffer,"ERROR: %s:%s Errno=%d exiting pid=%d",s1, s2, errno,getpid()); 
 		break;
 	case FORBIDDEN: 
-		(void)write(socket_fd, "HTTP/1.1 403 Forbidden\nContent-Length: 185\nConnection: close\nContent-Type: text/html\n\n<html><head>\n<title>403 Forbidden</title>\n</head><body>\n<h1>Forbidden</h1>\nThe requested URL, file type or operation is not allowed on this simple static file webserver.\n</body></html>\n",271);
+		(void)write(socket_fd, error_page[FORBIDDEN_PAGE], 271);
 		(void)sprintf(logbuffer,"FORBIDDEN: %s:%s",s1, s2); 
 		break;
 	case NOTFOUND: 
-		(void)write(socket_fd, "HTTP/1.1 404 Not Found\nContent-Length: 136\nConnection: close\nContent-Type: text/html\n\n<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\nThe requested URL was not found on this server.\n</body></html>\n",224);
+		(void)write(socket_fd, error_page[NOTFOUND_PAGE], 224);
 		(void)sprintf(logbuffer,"NOT FOUND: %s:%s",s1, s2); 
 		break;
 	case LOG: (void)sprintf(logbuffer," INFO: %s:%s:%d",s1, s2,socket_fd); break;
