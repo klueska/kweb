@@ -183,7 +183,6 @@ void web(int fd, int hit)
 	}
 	sleep(1);	/* allow socket to drain before signalling the socket is closed */
 	close(fd);
-	exit(1);
 }
 
 int main(int argc, char **argv)
@@ -244,18 +243,11 @@ int main(int argc, char **argv)
 
 	for(hit=1; ;hit++) {
 		length = sizeof(cli_addr);
-		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0)
-			logger(ERROR,"system call", "accept", 0);
-		if((pid = fork()) < 0) {
-			logger(ERROR,"system call", "fork", 0);
+		if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
+			logger(ERROR, "system call", "accept", 0);
 		}
 		else {
-			if(pid == 0) { 	/* child */
-				close(listenfd);
-				web(socketfd, hit); /* never returns */
-			} else { 	/* parent */
-				close(socketfd);
-			}
+			web(socketfd, hit);
 		}
 	}
 }
