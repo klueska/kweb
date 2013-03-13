@@ -83,11 +83,9 @@ void logger(int type, char *s1, char *s2, int socket_fd)
                     s1, s2, errno, getpid()); 
 			break;
 		case FORBIDDEN: 
-			write(socket_fd, page_data[FORBIDDEN_PAGE], 271);
 			sprintf(logbuffer,"FORBIDDEN: %s:%s", s1, s2); 
 			break;
 		case NOTFOUND: 
-			write(socket_fd, page_data[NOTFOUND_PAGE], 224);
 			sprintf(logbuffer,"NOT FOUND: %s:%s", s1, s2); 
 			break;
 		case LOG:

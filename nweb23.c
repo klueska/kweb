@@ -40,7 +40,10 @@ void http_server(struct request *__r)
   /* Read Web request in one go */
   ret =read(r->socketfd, buffer, BUFSIZE);   
   if(ret == 0 || ret == -1) {  /* read failure stop now */
-    logger(FORBIDDEN, "failed to read browser request", "", r->socketfd);
+    logger(FORBIDDEN, "Failed to read browser request", "", r->socketfd);
+    write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+    finish_request(r);
+    return;
   }
 
   /* Check if return code is valid number of chars
@@ -59,6 +62,9 @@ void http_server(struct request *__r)
   logger(LOG, "Request", buffer, r->req.id);
   if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4)) {
     logger(FORBIDDEN,"Only simple GET operation supported", buffer, r->socketfd);
+    write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+    finish_request(r);
+    return;
   }
 
   /* Null terminate after the second space to ignore extra stuff */
@@ -73,7 +79,10 @@ void http_server(struct request *__r)
    /* Check for illegal parent directory use .. */
   for(j=0; j<i-1; j++) {
     if(buffer[j] == '.' && buffer[j+1] == '.') {
-      logger(FORBIDDEN,"Parent directory (..) path names not supported", buffer, r->socketfd);
+      logger(FORBIDDEN, "Parent directory (..) path names not supported", buffer, r->socketfd);
+      write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+      finish_request(r);
+      return;
     }
   }
 
@@ -92,12 +101,18 @@ void http_server(struct request *__r)
     }
   }
   if(fstr == 0) {
-    logger(FORBIDDEN,"file extension type not supported", buffer, r->socketfd);
+    logger(FORBIDDEN, "File extension type not supported", buffer, r->socketfd);
+    write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+    finish_request(r);
+    return;
   }
 
   /* Open the file for reading */
   if((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
-    logger(NOTFOUND, "failed to open file", &buffer[5], r->socketfd);
+    logger(NOTFOUND, "Failed to open file", &buffer[5], r->socketfd);
+    write(r->socketfd, page_data[NOTFOUND_PAGE], 224);
+    finish_request(r);
+    return;
   }
 
   /* Get the File length */
