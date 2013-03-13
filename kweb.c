@@ -214,8 +214,8 @@ int main(int argc, char **argv)
   struct request_queue q;
   request_queue_init(&q, http_server, sizeof(struct http_request));
   tpool_init(&q, 2*get_nprocs());
+  length = sizeof(cli_addr);
   for(;;) {
-    length = sizeof(cli_addr);
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
       logger(ERROR, "System call", "accept", 0);
     }
