@@ -11,7 +11,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
-#include "nweb23.h"
+#include "kweb.h"
 
 /* This is a wrapper to allow us to drain a socket before closing it */
 static inline void finish_request(struct http_request *r)
@@ -144,11 +144,11 @@ int main(int argc, char **argv)
   /* Verify proper number of args and print usage if invalid */
   if( argc < 3  || argc > 3 || !strcmp(argv[1], "-?") ) {
     printf(""
-    "nweb - Version %d\n"
-    "Usage: nweb <port_number> <top_directory>\n"
-    "Example: nweb 8181 /home/nwebdir &\n\n"
+    "kweb - Version %s\n"
+    "Usage: kweb <port_number> <top_directory>\n"
+    "Example: kweb 8181 /home/kwebdir &\n\n"
 
-    "nweb is a small and safe multi-threaded static web server\n"
+    "kweb is a small and safe multi-threaded static web server\n"
     "It only serves files with the extensions named below.\n"
     "It also only serves files from the named directory or its sub-directories.\n\n"
 
@@ -171,7 +171,7 @@ int main(int argc, char **argv)
      !strncmp(argv[2], "/bin", 5 ) || !strncmp(argv[2], "/lib", 5 ) ||
      !strncmp(argv[2], "/tmp", 5 ) || !strncmp(argv[2], "/usr", 5 ) ||
      !strncmp(argv[2], "/dev", 5 ) || !strncmp(argv[2], "/sbin", 6)){
-    printf("ERROR: Bad top directory %s, see nweb -?\n", argv[2]);
+    printf("ERROR: Bad top directory %s, see kweb -?\n", argv[2]);
     exit(1);
   }
 
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
   /* Start accepting requests and processing them */
   fflush(stdout);
-  logger(LOG, "Nweb starting", argv[1], getpid());
+  logger(LOG, "kweb starting", argv[1], getpid());
 
   struct request_queue q;
   request_queue_init(&q, http_server, sizeof(struct http_request));

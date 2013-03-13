@@ -1,9 +1,10 @@
-#ifndef NWEB_H
-#define NWEB_H
+#ifndef KWEB_H
+#define KWEB_H
 
+#define DEBUG
 #include "tpool.h"
 
-#define VERSION     24
+#define VERSION  "1.0"
 
 #define ERROR       42
 #define LOG         44
@@ -63,7 +64,7 @@ char *page_data[] = {
     "</body></html>\n",
 
   "HTTP/1.1 200 OK\n"
-    "Server: nweb/%d.0\n"
+    "Server: kweb/%s\n"
     "Content-Length: %ld\n"
     "Connection: close\n"
     "Content-Type: %s\n\n"
@@ -93,11 +94,11 @@ void logger(int type, char *s1, char *s2, int socket_fd)
             break;
 	}	
 	/* No checks here, nothing can be done with a failure anyway */
-	if((fd = open("nweb.log", O_CREAT | O_WRONLY | O_APPEND, 0644)) >= 0) {
+	if((fd = open("kweb.log", O_CREAT | O_WRONLY | O_APPEND, 0644)) >= 0) {
 		write(fd, logbuffer, strlen(logbuffer)); 
 		write(fd, "\n", 1);      
 		close(fd);
 	}
 }
 #endif // DEBUG
-#endif // NWEB_H
+#endif // KWEB_H
