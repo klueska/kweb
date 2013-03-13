@@ -66,16 +66,13 @@ static struct request *__dequeue_request(struct request_queue *q)
 
 static void *__thread_wrapper(void *arg)
 {
-  int last_request = 0;
+  int total_requests = 0;
   struct request_queue *q = (struct request_queue*)arg;
   while(1) {
     spinlock_lock(&q->lock);
     struct request *r = __dequeue_request(q);
-    if(r) {
-      last_request = r->id;
-    }
-    else {
-      last_request = q->total_requests;
+    if(r == NULL) {
+      total_requests = q->total_requests;
     }
     spinlock_unlock(&q->lock);
 
@@ -84,7 +81,7 @@ static void *__thread_wrapper(void *arg)
       destroy_request(q, r);
     }
     else {
-      futex_wait(&q->total_requests, last_request);
+      futex_wait(&q->total_requests, total_requests);
     }
   }
 }
