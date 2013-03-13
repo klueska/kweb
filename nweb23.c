@@ -7,91 +7,25 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/sysinfo.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
 #include "nweb23.h"
 
-#define VERSION     23
-
-#define ERROR       42
-#define LOG         44
-#define BUFSIZE   8096
-
-#define FORBIDDEN  403
-#define NOTFOUND   404
-
-struct thread_params {
-  int fd;
-  int hit;
-};
-
-struct {
-  char *ext;
-  char *filetype;
-} extensions [] = {
-  {"gif", "image/gif" },  
-  {"jpg", "image/jpg" }, 
-  {"jpeg","image/jpeg"},
-  {"png", "image/png" },  
-  {"ico", "image/ico" },  
-  {"zip", "image/zip" },  
-  {"gz",  "image/gz"  },  
-  {"tar", "image/tar" },  
-  {"htm", "text/html" },  
-  {"html","text/html" },  
-  {0,0}
-};
-
-enum {
-  FORBIDDEN_PAGE,
-  NOTFOUND_PAGE,
-  OK_HEADER,
-};
-char *page_data[] = {
-  "HTTP/1.1 403 Forbidden\n"
-    "Content-Length: 185\n"
-    "Connection: close\n"
-    "Content-Type: text/html\n\n"
-    "<html><head>\n"
-    "<title>403 Forbidden</title>\n"
-    "</head><body>\n"
-    "<h1>Forbidden</h1>\n"
-    "The requested URL, file type or operation is not allowed on this simple static file webserver.\n"
-    "</body></html>\n",
-
-  "HTTP/1.1 404 Not Found\n"
-    "Content-Length: 136\n"
-    "Connection: close\n"
-    "Content-Type: text/html\n\n"
-    "<html><head>\n"
-    "<title>404 Not Found</title>\n"
-    "</head><body>\n"
-    "<h1>Not Found</h1>\n"
-    "The requested URL was not found on this server.\n"
-    "</body></html>\n",
-
-  "HTTP/1.1 200 OK\n"
-    "Server: nweb/%d.0\n"
-    "Content-Length: %ld\n"
-    "Connection: close\n"
-    "Content-Type: %s\n\n"
-};
-
-/* this is a child web server process, so we can exit on errors */
-void *web(void *__p)
+/* This is a child web server thread */
+void http_server(struct request *__r)
 {
-  struct thread_params *p = __p;
-  int fd = p->fd;
-  int hit = p->hit;
+  struct http_request *r = (struct http_request *)__r;
   int j, file_fd, buflen;
   long i, ret, len;
   char * fstr;
   static char buffer[BUFSIZE+1]; /* static so zero filled */
 
-  ret =read(fd, buffer, BUFSIZE);   /* read Web request in one go */
+  /* Read Web request in one go */
+  ret =read(r->socketfd, buffer, BUFSIZE);   
   if(ret == 0 || ret == -1) {  /* read failure stop now */
-    logger(FORBIDDEN, "failed to read browser request", "", fd);
+    logger(FORBIDDEN, "failed to read browser request", "", r->socketfd);
   }
 
   if(ret > 0 && ret < BUFSIZE)  /* return code is valid chars */
@@ -103,9 +37,9 @@ void *web(void *__p)
     if(buffer[i] == '\r' || buffer[i] == '\n')
       buffer[i]='*';
 
-  logger(LOG, "request", buffer, hit);
+  logger(LOG, "request", buffer, r->req.id);
   if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4) ) {
-    logger(FORBIDDEN,"Only simple GET operation supported", buffer, fd);
+    logger(FORBIDDEN,"Only simple GET operation supported", buffer, r->socketfd);
   }
 
   for(i=4; i<BUFSIZE; i++) { /* null terminate after the second space to ignore extra stuff */
@@ -118,7 +52,7 @@ void *web(void *__p)
    /* check for illegal parent directory use .. */
   for(j=0; j<i-1; j++) {
     if(buffer[j] == '.' && buffer[j+1] == '.') {
-      logger(FORBIDDEN,"Parent directory (..) path names not supported",buffer,fd);
+      logger(FORBIDDEN,"Parent directory (..) path names not supported", buffer, r->socketfd);
     }
   }
 
@@ -137,43 +71,43 @@ void *web(void *__p)
     }
   }
   if(fstr == 0) {
-    logger(FORBIDDEN,"file extension type not supported", buffer, fd);
+    logger(FORBIDDEN,"file extension type not supported", buffer, r->socketfd);
   }
 
   /* open the file for reading */
-  if((file_fd = open(&buffer[5],O_RDONLY)) == -1) {
-    logger(NOTFOUND, "failed to open file",&buffer[5],fd);
+  if((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
+    logger(NOTFOUND, "failed to open file", &buffer[5], r->socketfd);
   }
 
-  logger(LOG, "SEND", &buffer[5], hit);
+  logger(LOG, "SEND", &buffer[5], r->req.id);
    /* lseek to the file end to find the length */
   len = lseek(file_fd, (off_t)0, SEEK_END);
    /* lseek back to the file start ready for reading */
   lseek(file_fd, (off_t)0, SEEK_SET);
 
     sprintf(buffer, page_data[OK_HEADER], VERSION, len, fstr); /* Header + a blank line */
-  logger(LOG, "Header", buffer, hit);
-  write(fd, buffer, strlen(buffer));
+  logger(LOG, "Header", buffer, r->req.id);
+  write(r->socketfd, buffer, strlen(buffer));
 
   /* send file in 8KB block - last block may be smaller */
   while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
-    write(fd, buffer, ret);
+    write(r->socketfd, buffer, ret);
   }
-  /* allow socket to drain before signalling the socket is closed */
-  shutdown(fd, SHUT_WR);
+  /* Allow socket to drain before signalling the socket is closed */
+  shutdown(r->socketfd, SHUT_WR);
   for(;;) {
-    int res = read(fd, buffer, 4000);
+    int res = read(r->socketfd, buffer, 4000);
         if(res < 0)
-      logger(ERROR, "Connection reset by peer.", buffer, hit);
+      logger(ERROR, "Connection reset by peer.", buffer, r->req.id);
         if(!res)
       break;
   }
-  close(fd);
+  close(r->socketfd);
 }
 
 int main(int argc, char **argv)
 {
-  int i, port, pid, listenfd, socketfd, hit;
+  int i, port, pid, listenfd, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
   static struct sockaddr_in serv_addr; /* static = initialised to zeros */
@@ -224,20 +158,19 @@ int main(int argc, char **argv)
   if(listen(listenfd, 64) < 0)
     logger(ERROR, "system call", "listen", 0);
 
-  for(hit=1; ;hit++) {
+  struct request_queue q;
+  request_queue_init(&q, http_server, sizeof(struct http_request));
+  tpool_init(&q, 2*get_nprocs());
+  for(;;) {
     length = sizeof(cli_addr);
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
       logger(ERROR, "system call", "accept", 0);
     }
     else {
-      pthread_t thread;
-      pthread_attr_t attr;
-      pthread_attr_init(&attr);
-      pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-      struct thread_params *p = malloc(sizeof(struct thread_params));
-      p->fd = socketfd;
-      p->hit = hit;
-      pthread_create(&thread, &attr, web, p);
+      struct http_request *r;
+      r = create_request(&q);
+      r->socketfd = socketfd;
+      enqueue_request(&q, &r->req);
     }
   }
 }
