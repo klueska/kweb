@@ -131,6 +131,7 @@ void http_server(struct request *__r)
   while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
     write(r->socketfd, buffer, ret);
   }
+  close(file_fd);
   finish_request(r);
 }
 
