@@ -20,7 +20,7 @@ void http_server(struct request *__r)
   int j, file_fd, buflen;
   long i, ret, len;
   char * fstr;
-  static char buffer[BUFSIZE+1]; /* static so zero filled */
+  char buffer[BUFSIZE+1]; 
 
   /* Read Web request in one go */
   ret =read(r->socketfd, buffer, BUFSIZE);   
