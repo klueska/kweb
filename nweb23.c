@@ -43,41 +43,47 @@ void http_server(struct request *__r)
     logger(FORBIDDEN, "failed to read browser request", "", r->socketfd);
   }
 
-  if(ret > 0 && ret < BUFSIZE)  /* return code is valid chars */
-    buffer[ret]=0;    /* terminate the buffer */
+  /* Check if return code is valid number of chars
+     and terminate the buffer appropriately */
+  if(ret > 0 && ret < BUFSIZE)
+    buffer[ret]=0;
   else
-      buffer[0]=0;
+    buffer[0]=0;
 
-  for(i=0; i<ret; i++)  /* remove CF and LF characters */
+  /* Remove CF and LF characters */
+  for(i=0; i<ret; i++)
     if(buffer[i] == '\r' || buffer[i] == '\n')
       buffer[i]='*';
 
-  logger(LOG, "request", buffer, r->req.id);
-  if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4) ) {
+  /* Make sure it's a GET operation */
+  logger(LOG, "Request", buffer, r->req.id);
+  if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4)) {
     logger(FORBIDDEN,"Only simple GET operation supported", buffer, r->socketfd);
   }
 
-  for(i=4; i<BUFSIZE; i++) { /* null terminate after the second space to ignore extra stuff */
-    if(buffer[i] == ' ') { /* string is "GET URL " +lots of other stuff */
+  /* Null terminate after the second space to ignore extra stuff */
+  for(i=4; i<BUFSIZE; i++) {
+    /* String is "GET URL " + lots of other stuff */
+    if(buffer[i] == ' ') {
       buffer[i] = 0;
       break;
     }
   }
 
-   /* check for illegal parent directory use .. */
+   /* Check for illegal parent directory use .. */
   for(j=0; j<i-1; j++) {
     if(buffer[j] == '.' && buffer[j+1] == '.') {
       logger(FORBIDDEN,"Parent directory (..) path names not supported", buffer, r->socketfd);
     }
   }
 
-  /* convert no filename to index file */
+  /* Convert no filename to index file */
   if(!strncmp(&buffer[0],"GET /\0",6) || !strncmp(&buffer[0],"get /\0",6))
-    (void)strcpy(buffer,"GET /index.html");
+    strcpy(buffer,"GET /index.html");
 
-  /* work out the file type and check we support it */
+  /* Work out the file type and check we support it */
   buflen=strlen(buffer);
-  fstr = (char *)0;
+  fstr = 0;
   for(i=0; extensions[i].ext != 0; i++) {
     len = strlen(extensions[i].ext);
     if(!strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
@@ -89,22 +95,26 @@ void http_server(struct request *__r)
     logger(FORBIDDEN,"file extension type not supported", buffer, r->socketfd);
   }
 
-  /* open the file for reading */
+  /* Open the file for reading */
   if((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
     logger(NOTFOUND, "failed to open file", &buffer[5], r->socketfd);
   }
 
-  logger(LOG, "SEND", &buffer[5], r->req.id);
+  /* Get the File length */
    /* lseek to the file end to find the length */
   len = lseek(file_fd, (off_t)0, SEEK_END);
    /* lseek back to the file start ready for reading */
-  lseek(file_fd, (off_t)0, SEEK_SET);
+  lseek(file_fd, 0, SEEK_SET);
 
-    sprintf(buffer, page_data[OK_HEADER], VERSION, len, fstr); /* Header + a blank line */
+  /* Start sending a response */
+  logger(LOG, "SEND", &buffer[5], r->req.id);
+
+  /* Send the necessary header info + a blank line */
+  sprintf(buffer, page_data[OK_HEADER], VERSION, len, fstr);
   logger(LOG, "Header", buffer, r->req.id);
   write(r->socketfd, buffer, strlen(buffer));
 
-  /* send file in 8KB block - last block may be smaller */
+  /* Send the file itself in 8KB chunks - last block may be smaller */
   while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
     write(r->socketfd, buffer, ret);
   }
