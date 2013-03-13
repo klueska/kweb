@@ -76,7 +76,7 @@ void http_server(struct request *__r)
     }
   }
 
-   /* Check for illegal parent directory use .. */
+  /* Check for illegal parent directory use .. */
   for(j=0; j<i-1; j++) {
     if(buffer[j] == '.' && buffer[j+1] == '.') {
       logger(FORBIDDEN, "Parent directory (..) path names not supported", buffer, r->socketfd);
@@ -116,9 +116,7 @@ void http_server(struct request *__r)
   }
 
   /* Get the File length */
-   /* lseek to the file end to find the length */
   len = lseek(file_fd, 0, SEEK_END);
-   /* lseek back to the file start ready for reading */
   lseek(file_fd, 0, SEEK_SET);
 
   /* Start sending a response */
@@ -138,56 +136,77 @@ void http_server(struct request *__r)
 
 int main(int argc, char **argv)
 {
-  int i, port, pid, listenfd, socketfd;
+  int port, pid, listenfd, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
   static struct sockaddr_in serv_addr; /* static = initialised to zeros */
 
+  /* Verify proper number of args and print usage if invalid */
   if( argc < 3  || argc > 3 || !strcmp(argv[1], "-?") ) {
-    (void)printf("hint: nweb Port-Number Top-Directory\t\tversion %d\n\n"
-  "\tnweb is a small and very safe mini web server\n"
-  "\tnweb only servers out file/web pages with extensions named below\n"
-  "\t and only from the named directory or its sub-directories.\n"
-  "\tThere is no fancy features = safe and secure.\n\n"
-  "\tExample: nweb 8181 /home/nwebdir &\n\n"
-  "\tOnly Supports:", VERSION);
-    for(i=0;extensions[i].ext != 0;i++)
-      (void)printf(" %s", extensions[i].ext);
-
-    (void)printf("\n\tNot Supported: URLs including \"..\", Java, Javascript, CGI\n"
-  "\tNot Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin \n"
-  "\tNo warranty given or implied\n\tNigel Griffiths nag@uk.ibm.com\n"  );
+    printf(""
+      "nweb - Version %d\n"
+      "Usage: nweb <port_number> <top_directory>\n"
+      "Example: nweb 8181 /home/nwebdir &\n\n"
+      "\tnweb is a small and very safe mini web server\n"
+      "\tnweb only servers out file/web pages with extensions named below\n"
+      "\t and only from the named directory or its sub-directories.\n"
+      "\tThere are no fancy features = safe and secure.\n\n"
+      "\tOnly Supports:", VERSION);
+    for(int i=0; extensions[i].ext != 0; i++)
+      printf(" %s", extensions[i].ext);
+    printf("\n\n"
+      "\tNot Supported: URLs including \"..\", Java, Javascript, CGI\n"
+      "\tNot Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin\n"
+      "\tNo warranty given or implied\n"
+      "\tKevin Klues <klueska@cs.berkeley.edu>\n"
+      "\t(Adapted from nweb by Nigel Griffiths <nag@uk.ibm.com>\n");
     exit(0);
   }
-  if( !strncmp(argv[2], "/"   , 2 ) || !strncmp(argv[2], "/etc", 5 ) ||
-      !strncmp(argv[2], "/bin", 5 ) || !strncmp(argv[2], "/lib", 5 ) ||
-      !strncmp(argv[2], "/tmp", 5 ) || !strncmp(argv[2], "/usr", 5 ) ||
-      !strncmp(argv[2], "/dev", 5 ) || !strncmp(argv[2], "/sbin", 6) ){
+
+  /* Make sure the specified ROOT directory is a valid one */
+  if(!strncmp(argv[2], "/"   , 2 ) || !strncmp(argv[2], "/etc", 5 ) ||
+     !strncmp(argv[2], "/bin", 5 ) || !strncmp(argv[2], "/lib", 5 ) ||
+     !strncmp(argv[2], "/tmp", 5 ) || !strncmp(argv[2], "/usr", 5 ) ||
+     !strncmp(argv[2], "/dev", 5 ) || !strncmp(argv[2], "/sbin", 6)){
     printf("ERROR: Bad top directory %s, see nweb -?\n", argv[2]);
-    exit(3);
+    exit(1);
   }
+
+  /* Verify that the specified port number is a valid one */
+  port = atoi(argv[1]);
+  if(port < 0 || port >60000) {
+    printf("ERROR: Invalid port number %d (try 1->60000)", port);
+    exit(1);
+  }
+
+  /* Change to the specified ROOT directory to set it as the ROOT of the fs */
   if(chdir(argv[2]) == -1){ 
     printf("ERROR: Can't Change to directory %s\n", argv[2]);
-    exit(4);
+    exit(1);
   }
-  fflush(stdout);
-  logger(LOG, "Nweb starting", argv[1], getpid());
 
-  /* setup the network socket */
-  if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    logger(ERROR, "System call", "socket", 0);
+  /* Setup the network socket */
+  if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    printf("ERROR: System call - socket");
+    exit(1);
+  }
 
-  port = atoi(argv[1]);
-  if(port < 0 || port >60000)
-    logger(ERROR, "Invalid port number (try 1->60000)", argv[1], 0);
-
+  /* Bind to the specified address and listen on the specified port */
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   serv_addr.sin_port = htons(port);
-  if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    logger(ERROR, "System call", "bind", 0);
-  if(listen(listenfd, 64) < 0)
-    logger(ERROR, "System call", "listen", 0);
+  if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    printf("ERROR: System call - bind");
+    exit(1);
+  }
+  if(listen(listenfd, 64) < 0) {
+    printf("ERROR: System call - listen");
+    exit(1);
+  }
+
+  /* Start accepting requests and processing them */
+  fflush(stdout);
+  logger(LOG, "Nweb starting", argv[1], getpid());
 
   struct request_queue q;
   request_queue_init(&q, http_server, sizeof(struct http_request));
