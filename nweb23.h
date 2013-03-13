@@ -3,7 +3,7 @@
 
 #include "tpool.h"
 
-#define VERSION     23
+#define VERSION     24
 
 #define ERROR       42
 #define LOG         44

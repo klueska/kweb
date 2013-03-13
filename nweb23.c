@@ -144,22 +144,25 @@ int main(int argc, char **argv)
   /* Verify proper number of args and print usage if invalid */
   if( argc < 3  || argc > 3 || !strcmp(argv[1], "-?") ) {
     printf(""
-      "nweb - Version %d\n"
-      "Usage: nweb <port_number> <top_directory>\n"
-      "Example: nweb 8181 /home/nwebdir &\n\n"
-      "\tnweb is a small and very safe mini web server\n"
-      "\tnweb only servers out file/web pages with extensions named below\n"
-      "\t and only from the named directory or its sub-directories.\n"
-      "\tThere are no fancy features = safe and secure.\n\n"
-      "\tOnly Supports:", VERSION);
+    "nweb - Version %d\n"
+    "Usage: nweb <port_number> <top_directory>\n"
+    "Example: nweb 8181 /home/nwebdir &\n\n"
+
+    "nweb is a small and safe multi-threaded static web server\n"
+    "It only serves files with the extensions named below.\n"
+    "It also only serves files from the named directory or its sub-directories.\n\n"
+
+    "Supports:", VERSION);
     for(int i=0; extensions[i].ext != 0; i++)
       printf(" %s", extensions[i].ext);
-    printf("\n\n"
-      "\tNot Supported: URLs including \"..\", Java, Javascript, CGI\n"
-      "\tNot Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin\n"
-      "\tNo warranty given or implied\n"
-      "\tKevin Klues <klueska@cs.berkeley.edu>\n"
-      "\t(Adapted from nweb by Nigel Griffiths <nag@uk.ibm.com>\n");
+    printf(""
+    "\n"
+    "Not Supported: URLs including \"..\", Java, Javascript, CGI\n"
+    "Not Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin\n\n"
+
+    "No warranty given or implied\n"
+    "Kevin Klues <klueska@cs.berkeley.edu>\n"
+    "(Adapted from nweb Version 23 by Nigel Griffiths <nag@uk.ibm.com>)\n");
     exit(0);
   }
 
