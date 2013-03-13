@@ -165,7 +165,8 @@ void *web(void *__p)
 		int res = read(fd, buffer, 4000);
         if(res < 0)
 			logger(ERROR, "Connection reset by peer.", buffer, hit);
-		break;
+        if(!res)
+		  break;
 	}
 	close(fd);
 }
