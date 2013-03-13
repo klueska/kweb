@@ -13,6 +13,21 @@
 #include <pthread.h>
 #include "nweb23.h"
 
+/* This is a wrapper to allow us to drain a socket before closing it */
+static inline void finish_request(struct http_request *r)
+{
+  /* Allow socket to drain before closing it */
+  char buffer[4096];
+  for(;;) {
+    int res = read(r->socketfd, buffer, 4096);
+    if(res < 0)
+      logger(LOG, "Connection reset by peer.", buffer, r->req.id);
+    if(!res)
+      break;
+  }
+  close(r->socketfd);
+}
+
 /* This is a child web server thread */
 void http_server(struct request *__r)
 {
@@ -93,16 +108,7 @@ void http_server(struct request *__r)
   while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
     write(r->socketfd, buffer, ret);
   }
-  /* Allow socket to drain before signalling the socket is closed */
-  shutdown(r->socketfd, SHUT_WR);
-  for(;;) {
-    int res = read(r->socketfd, buffer, 4000);
-        if(res < 0)
-      logger(ERROR, "Connection reset by peer.", buffer, r->req.id);
-        if(!res)
-      break;
-  }
-  close(r->socketfd);
+  finish_request(r);
 }
 
 int main(int argc, char **argv)
