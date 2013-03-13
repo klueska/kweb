@@ -61,7 +61,7 @@ void http_server(struct request *__r)
   /* Make sure it's a GET operation */
   logger(LOG, "Request", buffer, r->req.id);
   if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4)) {
-    logger(FORBIDDEN,"Only simple GET operation supported", buffer, r->socketfd);
+    logger(FORBIDDEN, "Only simple GET operation supported", buffer, r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
     finish_request(r);
     return;
@@ -87,8 +87,8 @@ void http_server(struct request *__r)
   }
 
   /* Convert no filename to index file */
-  if(!strncmp(&buffer[0],"GET /\0",6) || !strncmp(&buffer[0],"get /\0",6))
-    strcpy(buffer,"GET /index.html");
+  if(!strncmp(&buffer[0], "GET /\0", 6) || !strncmp(&buffer[0], "get /\0", 6))
+    strcpy(buffer, "GET /index.html");
 
   /* Work out the file type and check we support it */
   buflen=strlen(buffer);
@@ -117,7 +117,7 @@ void http_server(struct request *__r)
 
   /* Get the File length */
    /* lseek to the file end to find the length */
-  len = lseek(file_fd, (off_t)0, SEEK_END);
+  len = lseek(file_fd, 0, SEEK_END);
    /* lseek back to the file start ready for reading */
   lseek(file_fd, 0, SEEK_SET);
 
@@ -152,30 +152,30 @@ int main(int argc, char **argv)
   "\tExample: nweb 8181 /home/nwebdir &\n\n"
   "\tOnly Supports:", VERSION);
     for(i=0;extensions[i].ext != 0;i++)
-      (void)printf(" %s",extensions[i].ext);
+      (void)printf(" %s", extensions[i].ext);
 
     (void)printf("\n\tNot Supported: URLs including \"..\", Java, Javascript, CGI\n"
   "\tNot Supported: directories / /etc /bin /lib /tmp /usr /dev /sbin \n"
   "\tNo warranty given or implied\n\tNigel Griffiths nag@uk.ibm.com\n"  );
     exit(0);
   }
-  if( !strncmp(argv[2],"/"   ,2 ) || !strncmp(argv[2],"/etc", 5 ) ||
-      !strncmp(argv[2],"/bin",5 ) || !strncmp(argv[2],"/lib", 5 ) ||
-      !strncmp(argv[2],"/tmp",5 ) || !strncmp(argv[2],"/usr", 5 ) ||
-      !strncmp(argv[2],"/dev",5 ) || !strncmp(argv[2],"/sbin",6) ){
-    printf("ERROR: Bad top directory %s, see nweb -?\n",argv[2]);
+  if( !strncmp(argv[2], "/"   , 2 ) || !strncmp(argv[2], "/etc", 5 ) ||
+      !strncmp(argv[2], "/bin", 5 ) || !strncmp(argv[2], "/lib", 5 ) ||
+      !strncmp(argv[2], "/tmp", 5 ) || !strncmp(argv[2], "/usr", 5 ) ||
+      !strncmp(argv[2], "/dev", 5 ) || !strncmp(argv[2], "/sbin", 6) ){
+    printf("ERROR: Bad top directory %s, see nweb -?\n", argv[2]);
     exit(3);
   }
   if(chdir(argv[2]) == -1){ 
-    printf("ERROR: Can't Change to directory %s\n",argv[2]);
+    printf("ERROR: Can't Change to directory %s\n", argv[2]);
     exit(4);
   }
   fflush(stdout);
-  logger(LOG, "nweb starting", argv[1], getpid());
+  logger(LOG, "Nweb starting", argv[1], getpid());
 
   /* setup the network socket */
   if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    logger(ERROR, "system call", "socket", 0);
+    logger(ERROR, "System call", "socket", 0);
 
   port = atoi(argv[1]);
   if(port < 0 || port >60000)
@@ -185,9 +185,9 @@ int main(int argc, char **argv)
   serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   serv_addr.sin_port = htons(port);
   if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
-    logger(ERROR, "system call", "bind", 0);
+    logger(ERROR, "System call", "bind", 0);
   if(listen(listenfd, 64) < 0)
-    logger(ERROR, "system call", "listen", 0);
+    logger(ERROR, "System call", "listen", 0);
 
   struct request_queue q;
   request_queue_init(&q, http_server, sizeof(struct http_request));
@@ -195,7 +195,7 @@ int main(int argc, char **argv)
   for(;;) {
     length = sizeof(cli_addr);
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
-      logger(ERROR, "system call", "accept", 0);
+      logger(ERROR, "System call", "accept", 0);
     }
     else {
       struct http_request *r;
