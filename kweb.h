@@ -1,7 +1,6 @@
 #ifndef KWEB_H
 #define KWEB_H
 
-#define DEBUG
 #include "tpool.h"
 
 #define VERSION  "1.0"

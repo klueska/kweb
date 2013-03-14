@@ -179,7 +179,7 @@ int main(int argc, char **argv)
   /* Verify that the specified port number is a valid one */
   port = atoi(argv[1]);
   if(port < 0 || port >60000) {
-    printf("ERROR: Invalid port number %d (try 1->60000)", port);
+    printf("ERROR: Invalid port number %d (try 1->60000)\n", port);
     exit(1);
   }
 
@@ -191,7 +191,7 @@ int main(int argc, char **argv)
 
   /* Setup the network socket */
   if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    printf("ERROR: System call - socket");
+    printf("ERROR: System call - socket\n");
     exit(1);
   }
 
@@ -200,11 +200,11 @@ int main(int argc, char **argv)
   serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
   serv_addr.sin_port = htons(port);
   if(bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-    printf("ERROR: System call - bind");
+    printf("ERROR: System call - bind\n");
     exit(1);
   }
   if(listen(listenfd, 64) < 0) {
-    printf("ERROR: System call - listen");
+    printf("ERROR: System call - listen\n");
     exit(1);
   }
 
