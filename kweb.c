@@ -17,13 +17,16 @@
 static inline void finish_request(struct http_request *r)
 {
   /* Allow socket to drain before closing it */
-  char buffer[4096];
+  char buffer[32];
   for(;;) {
-    int res = read(r->socketfd, buffer, 4096);
-    if(res < 0)
-      logger(LOG, "Connection reset by peer.", buffer, r->req.id);
-    if(!res)
+    int res = read(r->socketfd, buffer, 32);
+    if(res == 0) {
       break;
+    }
+    if(res < 0) {
+      logger(LOG, "Connection reset by peer.", buffer, r->req.id);
+      break;
+    }
   }
   close(r->socketfd);
 }
