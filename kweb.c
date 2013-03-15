@@ -74,7 +74,7 @@ void http_server(struct request *__r)
   for(i=4; i<BUFSIZE; i++) {
     /* String is "GET URL " + lots of other stuff */
     if(buffer[i] == ' ') {
-      buffer[i] = 0;
+      buffer[i] = '\0';
       break;
     }
   }
