@@ -3,7 +3,7 @@
 #include "tpool.h"
 
 void request_queue_init(struct request_queue *q, 
-                        void (*func)(struct request *),
+                        void (*func)(struct request_queue *, struct request *),
                         int request_size)
 {
   q->total_requests = 0;
@@ -36,7 +36,7 @@ void *create_request(struct request_queue *q)
   return r;
 }
 
-static void destroy_request(struct request_queue *q, struct request *r)
+void destroy_request(struct request_queue *q, struct request *r)
 {
   spinlock_lock(&q->zombie_lock);
   q->zombie_size++;
@@ -77,8 +77,7 @@ static void *__thread_wrapper(void *arg)
     spinlock_unlock(&q->lock);
 
     if(r) {
-      q->func(r);
-      destroy_request(q, r);
+      q->func(q, r);
     }
     else {
       futex_wait(&q->total_requests, total_requests);

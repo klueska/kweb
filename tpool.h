@@ -14,7 +14,7 @@ SIMPLEQ_HEAD(__request_queue, request);
 struct request_queue {
   int total_requests;
   int request_size;
-  void (*func)(struct request *);
+  void (*func)(struct request_queue *, struct request *);
 
   int size;
   spinlock_t lock;
@@ -26,10 +26,11 @@ struct request_queue {
 };
 
 void request_queue_init(struct request_queue *q, 
-                        void (*func)(struct request *),
+                        void (*func)(struct request_queue *, struct request *),
                         int request_size);
 void tpool_init(struct request_queue *q, int num);
 void *create_request(struct request_queue *q);
+void destroy_request(struct request_queue *q, struct request *r);
 void enqueue_request(struct request_queue *q, struct request *r);
 
 #endif // TSTACK_H

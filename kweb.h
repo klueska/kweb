@@ -12,9 +12,16 @@
 #define FORBIDDEN  403
 #define NOTFOUND   404
 
+enum {
+  REQ_NEW,
+  REQ_ALIVE
+};
+
 struct http_request {
   struct request req;
   int socketfd;
+  int state;
+  char buffer[BUFSIZE+1];
 };
 
 struct {

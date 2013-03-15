@@ -13,76 +13,83 @@
 #include <pthread.h>
 #include "kweb.h"
 
-/* This is a wrapper to allow us to drain a socket before closing it */
-static inline void finish_request(struct http_request *r)
+static long buffer_next_or_finish(struct http_request *r)
 {
-  /* Allow socket to drain before closing it */
-  char buffer[32];
-  for(;;) {
-    int res = read(r->socketfd, buffer, 32);
-    if(res == 0) {
-      break;
-    }
-    if(res < 0) {
-      logger(LOG, "Connection reset by peer.", buffer, r->req.id);
-      break;
-    }
+  /* Reset the buffer */
+  r->buffer[0] = '\0';
+
+  /* Read the request in one go */
+  long ret = read(r->socketfd, r->buffer, sizeof(r->buffer));   
+
+  /* If the return code is a valid number of chars, terminate the buffer
+   * appropriately and return so we can process the request */
+  if(ret > 0 && ret < sizeof(r->buffer)) {
+    r->buffer[ret] = '\0';
+    return ret;
   }
+
+  /* Otherwise... */
+  switch(r->state) {
+    case REQ_NEW:
+      /* Fail on a new request, and send back a FORBIDDEN error */
+      logger(FORBIDDEN, "Failed to read browser request", "", r->socketfd);
+      write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+      break;
+    case REQ_ALIVE:
+	  /* On a reenqueued request, it is OK for ret to return either no bytes or
+	   * an error code. If it's an error code, simply log that the connection
+	   * was killed prematurely by the client.*/
+      if(ret == -1)
+        logger(LOG, "Connection reset by peer.", buffer, r->req.id);
+      break;
+  }
+  /* In any case, close the socket because we are done with it */
   close(r->socketfd);
+  return ret;
 }
 
 /* This is a child web server thread */
-void http_server(struct request *__r)
+void http_server(struct request_queue *q, struct request *__r)
 {
   struct http_request *r = (struct http_request *)__r;
   int j, file_fd, buflen;
-  long i, ret, len;
-  char * fstr;
-  char buffer[BUFSIZE+1]; 
+  long i = 0, ret = 0, len = 0;
+  char *fstr;
+  char *request_line;
 
-  /* Read Web request in one go */
-  ret =read(r->socketfd, buffer, BUFSIZE);   
-  if(ret == 0 || ret == -1) {  /* read failure stop now */
-    logger(FORBIDDEN, "Failed to read browser request", "", r->socketfd);
-    write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
-    close(r->socketfd);
-    return;
-  }
+  /* If this is a new reqeust, buffer it up,
+   * and return if that is unsuccessful. */
+  if(r->state == REQ_NEW)
+    if((ret = buffer_next_or_finish(r)) <= 0)
+      return;
+  r->state = REQ_ALIVE;
 
-  /* Check if return code is valid number of chars
-     and terminate the buffer appropriately */
-  if(ret > 0 && ret < BUFSIZE)
-    buffer[ret]=0;
-  else
-    buffer[0]=0;
-
-  /* Remove CF and LF characters */
-  for(i=0; i<ret; i++)
-    if(buffer[i] == '\r' || buffer[i] == '\n')
-      buffer[i]='*';
+  /* Otherwise ...
+   * Parse through the request, grabbing only what we care about */
+  logger(LOG, "Request", r->buffer, r->req.id);
+  request_line = strtok(r->buffer, "\r\n");
 
   /* Make sure it's a GET operation */
-  logger(LOG, "Request", buffer, r->req.id);
-  if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4)) {
-    logger(FORBIDDEN, "Only simple GET operation supported", buffer, r->socketfd);
+  if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
+    logger(FORBIDDEN, "Only simple GET operation supported", request_line, r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
     close(r->socketfd);
     return;
   }
 
-  /* Null terminate after the second space to ignore extra stuff */
-  for(i=4; i<BUFSIZE; i++) {
+  /* Strip the version info from the request_line */
+  for(i=4; i<strlen(request_line); i++) {
     /* String is "GET URL " + lots of other stuff */
-    if(buffer[i] == ' ') {
-      buffer[i] = '\0';
+    if(request_line[i] == ' ') {
+      request_line[i] = '\0';
       break;
     }
   }
 
   /* Check for illegal parent directory use .. */
-  for(j=0; j<i-1; j++) {
-    if(buffer[j] == '.' && buffer[j+1] == '.') {
-      logger(FORBIDDEN, "Parent directory (..) path names not supported", buffer, r->socketfd);
+  for(j=4; j<i-1; j++) {
+    if(request_line[j] == '.' && request_line[j+1] == '.') {
+      logger(FORBIDDEN, "Parent directory (..) path names not supported", request_line, r->socketfd);
       write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
       close(r->socketfd);
       return;
@@ -90,29 +97,29 @@ void http_server(struct request *__r)
   }
 
   /* Convert no filename to index file */
-  if(!strncmp(&buffer[0], "GET /\0", 6) || !strncmp(&buffer[0], "get /\0", 6))
-    strcpy(buffer, "GET /index.html");
+  if(!strncmp(&request_line[0], "GET /\0", 6) || !strncmp(&request_line[0], "get /\0", 6))
+    strcpy(r->buffer, "GET /index.html");
 
   /* Work out the file type and check we support it */
-  buflen=strlen(buffer);
+  buflen=strlen(request_line);
   fstr = 0;
   for(i=0; extensions[i].ext != 0; i++) {
     len = strlen(extensions[i].ext);
-    if(!strncmp(&buffer[buflen-len], extensions[i].ext, len)) {
+    if(!strncmp(&request_line[buflen-len], extensions[i].ext, len)) {
       fstr =extensions[i].filetype;
       break;
     }
   }
   if(fstr == 0) {
-    logger(FORBIDDEN, "File extension type not supported", buffer, r->socketfd);
+    logger(FORBIDDEN, "File extension type not supported", request_line, r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
     close(r->socketfd);
     return;
   }
 
   /* Open the file for reading */
-  if((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
-    logger(NOTFOUND, "Failed to open file", &buffer[5], r->socketfd);
+  if((file_fd = open(&request_line[5], O_RDONLY)) == -1) {
+    logger(NOTFOUND, "Failed to open file", &request_line[5], r->socketfd);
     write(r->socketfd, page_data[NOTFOUND_PAGE], 224);
     close(r->socketfd);
     return;
@@ -123,19 +130,27 @@ void http_server(struct request *__r)
   lseek(file_fd, 0, SEEK_SET);
 
   /* Start sending a response */
-  logger(LOG, "SEND", &buffer[5], r->req.id);
+  logger(LOG, "SEND", &request_line[5], r->req.id);
 
   /* Send the necessary header info + a blank line */
-  sprintf(buffer, page_data[OK_HEADER], VERSION, len, fstr);
-  logger(LOG, "Header", buffer, r->req.id);
-  write(r->socketfd, buffer, strlen(buffer));
+  sprintf(r->buffer, page_data[OK_HEADER], VERSION, len, fstr);
+  logger(LOG, "Header", r->buffer, r->req.id);
+  write(r->socketfd, r->buffer, strlen(r->buffer));
 
   /* Send the file itself in 8KB chunks - last block may be smaller */
-  while((ret = read(file_fd, buffer, BUFSIZE)) > 0) {
-    write(r->socketfd, buffer, ret);
+  while((ret = read(file_fd, r->buffer, BUFSIZE)) > 0) {
+    write(r->socketfd, r->buffer, ret);
   }
   close(file_fd);
-  finish_request(r);
+
+  /* If there is another request to handle, read it, and reenqueue it for
+   * processing by another thread */
+  if(buffer_next_or_finish(r) > 0) {
+    enqueue_request(q, &r->req);
+  }
+  else {
+    destroy_request(q, &r->req);
+  }
 }
 
 int main(int argc, char **argv)
@@ -226,6 +241,7 @@ int main(int argc, char **argv)
     else {
       struct http_request *r;
       r = create_request(&q);
+      r->state = REQ_NEW;
       r->socketfd = socketfd;
       enqueue_request(&q, &r->req);
     }
