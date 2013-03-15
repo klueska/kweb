@@ -45,7 +45,7 @@ void http_server(struct request *__r)
   if(ret == 0 || ret == -1) {  /* read failure stop now */
     logger(FORBIDDEN, "Failed to read browser request", "", r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
-    finish_request(r);
+    close(r->socketfd);
     return;
   }
 
@@ -66,7 +66,7 @@ void http_server(struct request *__r)
   if(strncmp(buffer, "GET ", 4) && strncmp(buffer, "get ", 4)) {
     logger(FORBIDDEN, "Only simple GET operation supported", buffer, r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
-    finish_request(r);
+    close(r->socketfd);
     return;
   }
 
@@ -84,7 +84,7 @@ void http_server(struct request *__r)
     if(buffer[j] == '.' && buffer[j+1] == '.') {
       logger(FORBIDDEN, "Parent directory (..) path names not supported", buffer, r->socketfd);
       write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
-      finish_request(r);
+      close(r->socketfd);
       return;
     }
   }
@@ -106,7 +106,7 @@ void http_server(struct request *__r)
   if(fstr == 0) {
     logger(FORBIDDEN, "File extension type not supported", buffer, r->socketfd);
     write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
-    finish_request(r);
+    close(r->socketfd);
     return;
   }
 
@@ -114,7 +114,7 @@ void http_server(struct request *__r)
   if((file_fd = open(&buffer[5], O_RDONLY)) == -1) {
     logger(NOTFOUND, "Failed to open file", &buffer[5], r->socketfd);
     write(r->socketfd, page_data[NOTFOUND_PAGE], 224);
-    finish_request(r);
+    close(r->socketfd);
     return;
   }
 
