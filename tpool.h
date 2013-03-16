@@ -12,15 +12,18 @@ struct request {
 };
 SIMPLEQ_HEAD(__request_queue, request);
 struct request_queue {
-  int total_requests;
   int request_size;
   void (*func)(struct request_queue *, struct request *);
 
+  int total_enqueued;
   int size;
+  double size_sum;
   spinlock_t lock;
   struct __request_queue queue;
 
+  int zombie_total_enqueued;
   int zombie_size;
+  double zombie_size_sum;
   spinlock_t zombie_lock;
   struct __request_queue zombie_queue;
 };

@@ -12,7 +12,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <signal.h>
 #include "kweb.h"
+
+void sig_exit(int signo);
+void print_statistics();
+struct request_queue global_request_queue;
 
 static long buffer_next_or_finish(struct http_request *r)
 {
@@ -241,13 +246,20 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  /* Register a signal handler so we can print out some statistics once we kill
+   * the server */
+  if(signal(SIGINT, sig_exit) == SIG_ERR) {
+    printf("\nCan't catch SIGINT\n");
+    exit(1);
+  }
+
   /* Start accepting requests and processing them */
   fflush(stdout);
   logger(LOG, "Starting kweb", argv[1], getpid());
 
-  struct request_queue q;
-  request_queue_init(&q, http_server, sizeof(struct http_request));
-  tpool_init(&q, tpool_size);
+  struct request_queue *q = &global_request_queue;
+  request_queue_init(q, http_server, sizeof(struct http_request));
+  tpool_init(q, tpool_size);
   length = sizeof(cli_addr);
   for(;;) {
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
@@ -255,10 +267,30 @@ int main(int argc, char **argv)
     }
     else {
       struct http_request *r;
-      r = create_request(&q);
+      r = create_request(q);
       r->state = REQ_NEW;
       r->socketfd = socketfd;
-      enqueue_request(&q, &r->req);
+      enqueue_request(q, &r->req);
     }
   }
+}
+
+void sig_exit(int signo)
+{
+  if(signo == SIGINT) {
+    print_statistics();
+    exit(0);
+  }
+}
+
+void print_statistics()
+{
+  struct request_queue *q = &global_request_queue;
+  double average = 0;
+  average = q->total_enqueued ? 
+              q->size_sum/q->total_enqueued : 0;
+  printf("\nAverage request queue length: %lf\n", average);
+  average = q->zombie_total_enqueued ? 
+              q->zombie_size_sum/q->zombie_total_enqueued : 0;
+  printf("Average zombie queue length: %lf\n", average);
 }

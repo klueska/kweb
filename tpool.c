@@ -7,15 +7,18 @@ void request_queue_init(struct request_queue *q,
                         void (*func)(struct request_queue *, struct request *),
                         int request_size)
 {
-  q->total_requests = 0;
   q->request_size = request_size;
   q->func = func;
 
+  q->total_enqueued = 0;
   q->size = 0;
+  q->size_sum = 0;
   SIMPLEQ_INIT(&q->queue);
   spinlock_init(&q->lock);
 
+  q->zombie_total_enqueued = 0;
   q->zombie_size = 0;
+  q->zombie_size_sum = 0;
   SIMPLEQ_INIT(&q->zombie_queue);
   spinlock_init(&q->zombie_lock);
 }
@@ -40,7 +43,9 @@ void *create_request(struct request_queue *q)
 void destroy_request(struct request_queue *q, struct request *r)
 {
   spinlock_lock(&q->zombie_lock);
+  q->zombie_total_enqueued++;
   q->zombie_size++;
+  q->zombie_size_sum += q->zombie_size;
   SIMPLEQ_INSERT_HEAD(&q->zombie_queue, r, link);
   spinlock_unlock(&q->zombie_lock);
 }
@@ -48,12 +53,13 @@ void destroy_request(struct request_queue *q, struct request *r)
 void enqueue_request(struct request_queue *q, struct request *r)
 {
   spinlock_lock(&q->lock);
-  r->id = q->total_requests++;
+  r->id = q->total_enqueued++;
   q->size++;
+  q->size_sum += q->size;
   SIMPLEQ_INSERT_HEAD(&q->queue, r, link);
   spinlock_unlock(&q->lock);
 
-  futex_wake(&q->total_requests, 1);
+  futex_wake(&q->total_enqueued, 1);
 }
 
 static struct request *__dequeue_request(struct request_queue *q)
@@ -68,13 +74,13 @@ static struct request *__dequeue_request(struct request_queue *q)
 
 static void *__thread_wrapper(void *arg)
 {
-  int total_requests = 0;
+  int total_enqueued = 0;
   struct request_queue *q = (struct request_queue*)arg;
   while(1) {
     spinlock_lock(&q->lock);
     struct request *r = __dequeue_request(q);
     if(r == NULL) {
-      total_requests = q->total_requests;
+      total_enqueued = q->total_enqueued;
     }
     spinlock_unlock(&q->lock);
 
