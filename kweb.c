@@ -58,11 +58,14 @@ void http_server(struct request_queue *q, struct request *__r)
   char *fstr;
   char *request_line;
 
-  /* If this is a new reqeust, buffer it up,
-   * and return if that is unsuccessful. */
-  if(r->state == REQ_NEW)
-    if((ret = buffer_next_or_finish(r)) <= 0)
+  /* If this is a new request, buffer it up,
+   * or destroy it and return if that is unsuccessful. */
+  if(r->state == REQ_NEW) {
+    if((ret = buffer_next_or_finish(r)) <= 0) {
+      destroy_request(q, &r->req);
       return;
+    }
+  }
   r->state = REQ_ALIVE;
 
   /* Otherwise ...
