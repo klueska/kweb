@@ -109,6 +109,11 @@ void http_server(struct request_queue *q, struct request *__r)
   if(!strncmp(&request_line[0], "GET /\0", 6) || !strncmp(&request_line[0], "get /\0", 6))
     strcpy(r->buffer, "GET /index.html");
 
+  /* Check to see if the file is named /terminate.html.
+   * If so, kill the webserver and print some statistics */
+  if(!strncmp(&request_line[4], "/terminate.html", 15))
+    sig_exit(SIGINT);
+
   /* Work out the file type and check we support it */
   buflen=strlen(request_line);
   fstr = 0;
