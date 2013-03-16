@@ -17,6 +17,8 @@
 
 void sig_exit(int signo);
 void print_statistics();
+
+int listenfd;
 struct request_queue global_request_queue;
 
 static long buffer_next_or_finish(struct http_request *r)
@@ -170,7 +172,7 @@ void http_server(struct request_queue *q, struct request *__r)
 int main(int argc, char **argv)
 {
   int tpool_size = INT_MAX;
-  int port, pid, listenfd, socketfd;
+  int port, pid, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
   static struct sockaddr_in serv_addr; /* static = initialised to zeros */
@@ -238,6 +240,14 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  /* Set the sockopts so that we can rebind in case of ungracefully shutting
+   * down the server */
+  int yes = 1;
+  if(setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes))) {
+    printf("ERROR: System call - setsockopt\n");
+    exit(1);
+  }
+
   /* Bind to the specified address and listen on the specified port */
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -283,6 +293,7 @@ int main(int argc, char **argv)
 void sig_exit(int signo)
 {
   if(signo == SIGINT) {
+    close(listenfd);
     print_statistics();
     exit(0);
   }
