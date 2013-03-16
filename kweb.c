@@ -202,7 +202,7 @@ int main(int argc, char **argv)
 
   /* Verify that the specified port number is a valid one */
   port = atoi(argv[1]);
-  if(port < 0 || port >60000) {
+  if(port < 0 || port > 60000) {
     printf("ERROR: Invalid port number %d (try 1->60000)\n", port);
     exit(1);
   }
@@ -243,7 +243,7 @@ int main(int argc, char **argv)
 
   /* Start accepting requests and processing them */
   fflush(stdout);
-  logger(LOG, "kweb starting", argv[1], getpid());
+  logger(LOG, "Starting kweb", argv[1], getpid());
 
   struct request_queue q;
   request_queue_init(&q, http_server, sizeof(struct http_request));
