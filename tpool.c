@@ -1,4 +1,5 @@
 #include <malloc.h>
+#include <limits.h>
 #include "futex.h"
 #include "tpool.h"
 
@@ -80,18 +81,25 @@ static void *__thread_wrapper(void *arg)
       q->func(q, r);
     }
     else {
-      futex_wait(&q->total_requests, total_requests);
+      futex_wait(&q->total_enqueued, total_enqueued);
     }
   }
 }
 
-void tpool_init(struct request_queue *q, int num)
+int tpool_init(struct request_queue *q, int num)
 {
+  int num_created = 0;
   pthread_t thread;
   pthread_attr_t attr;
   pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-  for(int i=0; i<num; i++)
-    pthread_create(&thread, &attr, __thread_wrapper, q);
+  for(int i=0; i<num; i++) {
+    if(pthread_create(&thread, &attr, __thread_wrapper, q) == 0)
+      num_created++;
+    else
+      break;
+  }
+  return num_created;
 }
 

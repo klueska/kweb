@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
@@ -155,17 +156,19 @@ void http_server(struct request_queue *q, struct request *__r)
 
 int main(int argc, char **argv)
 {
+  int tpool_size = INT_MAX;
   int port, pid, listenfd, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
   static struct sockaddr_in serv_addr; /* static = initialised to zeros */
 
   /* Verify proper number of args and print usage if invalid */
-  if( argc < 3  || argc > 3 || !strcmp(argv[1], "-?") ) {
+  if( argc < 3  || argc > 4 || !strcmp(argv[1], "-?") ) {
     printf(""
     "kweb - Version %s\n"
-    "Usage: kweb <port_number> <top_directory>\n"
+    "Usage: kweb <port_number> <top_directory> [<tpool_size=MAX_INT>]\n"
     "Example: kweb 8181 /home/kwebdir &\n\n"
+    "         kweb 8181 /home/kwebdir 50 &\n\n"
 
     "kweb is a small and safe multi-threaded static web server\n"
     "It only serves files with the extensions named below.\n"
@@ -207,6 +210,15 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  /* Change to the specified ROOT directory to set it as the ROOT of the fs */
+  if(argc == 4) {
+    tpool_size = atoi(argv[3]);
+    if(tpool_size < 0 || tpool_size > INT_MAX) { 
+      printf("ERROR: Invalid tpool size %d\n", tpool_size);
+      exit(1);
+    }
+  }
+
   /* Setup the network socket */
   if((listenfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     printf("ERROR: System call - socket\n");
@@ -232,7 +244,7 @@ int main(int argc, char **argv)
 
   struct request_queue q;
   request_queue_init(&q, http_server, sizeof(struct http_request));
-  tpool_init(&q, 2*get_nprocs());
+  tpool_init(&q, tpool_size);
   length = sizeof(cli_addr);
   for(;;) {
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
