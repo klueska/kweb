@@ -60,6 +60,7 @@ static struct request *__dequeue_request(struct request_queue *q)
 {
   struct request *r = SIMPLEQ_FIRST(&q->queue);
   if(r) {
+    q->size--;
     SIMPLEQ_REMOVE_HEAD(&q->queue, link);
   }
   return r;
