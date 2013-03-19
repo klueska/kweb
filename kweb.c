@@ -14,13 +14,16 @@
 #include <pthread.h>
 #include <signal.h>
 #include "kweb.h"
+#include "cpu_util.h"
 
+void cpu_util_callback(struct cpu_util *c, void *arg);
 void sig_exit(int signo);
 void print_statistics();
 
 static int listenfd;
 static struct request_queue global_request_queue;
 static int tpool_size = INT_MAX;
+static struct cpu_util cpu_util;
 
 static long buffer_next_or_finish(struct http_request *r)
 {
@@ -275,6 +278,8 @@ int main(int argc, char **argv)
   struct request_queue *q = &global_request_queue;
   request_queue_init(q, http_server, sizeof(struct http_request));
   tpool_size = tpool_init(q, tpool_size);
+  cpu_util_init(&cpu_util, 1000, cpu_util_callback, NULL);
+  cpu_util_start(&cpu_util);
 
   length = sizeof(cli_addr);
   for(;;) {
@@ -296,9 +301,17 @@ int main(int argc, char **argv)
   }
 }
 
+void cpu_util_callback(struct cpu_util *c, void *arg)
+{
+  // Collect statistics
+  //cpu_util__current(c);
+  //cpu_util_get_average(c);
+}
+
 void sig_exit(int signo)
 {
   if(signo == SIGINT) {
+    cpu_util_stop(&cpu_util);
     close(listenfd);
     print_statistics();
     exit(0);
@@ -317,4 +330,5 @@ void print_statistics()
   average = q->zombie_total_enqueued ? 
               q->zombie_size_sum/q->zombie_total_enqueued : 0;
   printf("Average zombie queue length: %lf\n", average);
+  cpu_util_print_average(&cpu_util);
 }

@@ -1,2 +1,4 @@
+FILES = kweb.c tpool.c cpu_util.c
+
 all:
-	gcc -std=gnu99 kweb.c tpool.c -o kweb -lpthread
+	gcc -std=gnu99 $(FILES) -o kweb -lpthread
