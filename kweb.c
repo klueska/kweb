@@ -275,6 +275,7 @@ int main(int argc, char **argv)
   struct request_queue *q = &global_request_queue;
   request_queue_init(q, http_server, sizeof(struct http_request));
   tpool_size = tpool_init(q, tpool_size);
+
   length = sizeof(cli_addr);
   for(;;) {
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
