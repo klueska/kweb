@@ -46,7 +46,7 @@ void destroy_request(struct request_queue *q, struct request *r)
   q->zombie_total_enqueued++;
   q->zombie_size++;
   q->zombie_size_sum += q->zombie_size;
-  SIMPLEQ_INSERT_HEAD(&q->zombie_queue, r, link);
+  SIMPLEQ_INSERT_TAIL(&q->zombie_queue, r, link);
   spinlock_unlock(&q->zombie_lock);
 }
 
