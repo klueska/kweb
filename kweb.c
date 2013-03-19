@@ -21,8 +21,7 @@ void sig_exit(int signo);
 void print_statistics();
 
 static int listenfd;
-static struct request_queue global_request_queue;
-static int tpool_size = INT_MAX;
+static struct tpool tpool;
 static struct cpu_util cpu_util;
 
 static long buffer_next_or_finish(struct http_request *r)
@@ -73,7 +72,7 @@ void http_server(struct request_queue *q, struct request *__r)
    * or destroy it and return if that is unsuccessful. */
   if(r->state == REQ_NEW) {
     if((ret = buffer_next_or_finish(r)) <= 0) {
-      destroy_request(q, &r->req);
+      request_queue_destroy_request(q, &r->req);
       return;
     }
   }
@@ -166,15 +165,16 @@ void http_server(struct request_queue *q, struct request *__r)
   /* If there is another request to handle, read it, and reenqueue it for
    * processing by another thread */
   if(buffer_next_or_finish(r) > 0) {
-    enqueue_request(q, &r->req);
+    request_queue_enqueue_request(q, &r->req);
   }
   else {
-    destroy_request(q, &r->req);
+    request_queue_destroy_request(q, &r->req);
   }
 }
 
 int main(int argc, char **argv)
 {
+  int tpool_size = INT_MAX;
   int port, pid, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
@@ -275,9 +275,9 @@ int main(int argc, char **argv)
   fflush(stdout);
   logger(LOG, "Starting kweb", argv[1], getpid());
 
-  struct request_queue *q = &global_request_queue;
-  request_queue_init(q, http_server, sizeof(struct http_request));
-  tpool_size = tpool_init(q, tpool_size);
+  struct request_queue q;
+  request_queue_init(&q, sizeof(struct http_request));
+  tpool_init(&tpool, tpool_size, &q, http_server);
   cpu_util_init(&cpu_util, 1000, cpu_util_callback, NULL);
   cpu_util_start(&cpu_util);
 
@@ -288,14 +288,14 @@ int main(int argc, char **argv)
     }
     else {
       struct http_request *r;
-      r = create_request(q);
+      r = request_queue_create_request(&q);
       r->state = REQ_NEW;
       r->socketfd = socketfd;
       if(tpool_size == 0)
-        http_server(q, &r->req);
+        http_server(&q, &r->req);
       else {
-        enqueue_request(q, &r->req);
-        tpool_wake(q, 1);
+        request_queue_enqueue_request(&q, &r->req);
+        tpool_wake(&tpool, 1);
       }
     }
   }
@@ -321,14 +321,17 @@ void sig_exit(int signo)
 void print_statistics()
 {
   printf("\n");
-  struct request_queue *q = &global_request_queue;
+  struct tpool *t = &tpool;
   double average = 0;
-  printf("Thread Pool Size: %d\n", tpool_size);
-  average = q->total_enqueued ? 
-              q->size_sum/q->total_enqueued : 0;
+  printf("Thread Pool Size: %d\n", t->size);
+  average = t->q->total_enqueued ? 
+              t->q->size_sum/t->q->total_enqueued : 0;
   printf("Average request queue length: %lf\n", average);
-  average = q->zombie_total_enqueued ? 
-              q->zombie_size_sum/q->zombie_total_enqueued : 0;
+  average = t->q->zombie_total_enqueued ? 
+              t->q->zombie_size_sum/t->q->zombie_total_enqueued : 0;
   printf("Average zombie queue length: %lf\n", average);
+  average = t->active_threads_samples ? 
+              t->active_threads_sum/t->active_threads_samples : 0;
+  printf("Average active threads: %lf\n", average);
   cpu_util_print_average(&cpu_util);
 }
