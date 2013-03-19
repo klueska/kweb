@@ -53,13 +53,11 @@ void destroy_request(struct request_queue *q, struct request *r)
 void enqueue_request(struct request_queue *q, struct request *r)
 {
   spinlock_lock(&q->lock);
+  q->size_sum += q->size;
   r->id = q->total_enqueued++;
   q->size++;
-  q->size_sum += q->size;
   SIMPLEQ_INSERT_HEAD(&q->queue, r, link);
   spinlock_unlock(&q->lock);
-
-  futex_wake(&q->total_enqueued, 1);
 }
 
 static struct request *__dequeue_request(struct request_queue *q)
@@ -108,5 +106,10 @@ int tpool_init(struct request_queue *q, int num)
       break;
   }
   return num_created;
+}
+
+void tpool_wake(struct request_queue *q, int count)
+{
+  futex_wake(&q->total_enqueued, count);
 }
 

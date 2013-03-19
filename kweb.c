@@ -288,8 +288,10 @@ int main(int argc, char **argv)
       r->socketfd = socketfd;
       if(tpool_size == 0)
         http_server(q, &r->req);
-      else
+      else {
         enqueue_request(q, &r->req);
+        tpool_wake(q, 1);
+      }
     }
   }
 }
