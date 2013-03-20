@@ -21,8 +21,8 @@ struct tpool {
 int tpool_init(struct tpool *t, int size, struct request_queue *q,
                void (*func)(struct request_queue *, struct request *));
 void tpool_wake(struct tpool *t, int count);
-int tpool_get_current_active_threads(struct tpool *t);
-double tpool_get_average_active_threads(struct tpool *t);
+
+struct tpool_stats tpool_get_stats(struct tpool *t);
 void tpool_print_current_active_threads(struct tpool *t);
 void tpool_print_average_active_threads(struct tpool *t);
 

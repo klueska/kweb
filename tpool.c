@@ -67,32 +67,26 @@ void tpool_wake(struct tpool *t, int count)
   futex_wake(&t->q->qstats.total_enqueued, count);
 }
 
-int tpool_get_current_active_threads(struct tpool *t)
+struct tpool_stats tpool_get_stats(struct tpool *t)
 {
   spinlock_lock(&t->lock);
-  int active_threads = t->stats.active_threads;
+  struct tpool_stats s = t->stats;
   spinlock_unlock(&t->lock);
-  return active_threads;
+  return s;
 }
 
-double tpool_get_average_active_threads(struct tpool *t)
+void tpool_print_current_active_threads(struct tpool *t)
+{
+  struct tpool_stats s = tpool_get_stats(t);
+  printf("Current active threads: %d\n", s.active_threads);
+}
+
+void tpool_print_average_active_threads(struct tpool *t)
 {
   spinlock_lock(&t->lock);
   double average = t->stats.active_threads_samples ? 
                    t->stats.active_threads_sum/t->stats.active_threads_samples : 0;
   spinlock_unlock(&t->lock);
-  return average;
-}
-
-void tpool_print_current_active_threads(struct tpool *t)
-{
-  int active_threads = tpool_get_current_active_threads(t);
-  printf("Current active threads: %d\n", active_threads);
-}
-
-void tpool_print_average_active_threads(struct tpool *t)
-{
-  double average = tpool_get_average_active_threads(t);
   printf("Average active threads: %lf\n", average);
 }
 

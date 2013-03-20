@@ -33,8 +33,8 @@ void *request_queue_create_request(struct request_queue *q);
 void request_queue_destroy_request(struct request_queue *q, struct request *r);
 void request_queue_enqueue_request(struct request_queue *q, struct request *r);
 struct request *request_queue_dequeue_request(struct request_queue *q);
-int request_queue_get_current_size(struct request_queue *q);
-double request_queue_get_average_size(struct request_queue *q);
+
+struct request_queue_stats request_queue_get_stats(struct request_queue *q);
 void request_queue_print_current_size(struct request_queue *q);
 void request_queue_print_average_size(struct request_queue *q);
 
