@@ -325,11 +325,12 @@ static void ktimer_callback(void *arg)
 
 static void print_current_statistics()
 {
-  // Print current statistics
   struct tpool *t = &tpool;
   struct cpu_util *c = &cpu_util;
 
+  // Print current statistics
   printf("\n");
+  printf("Current Interval Statistics\n");
   printf("Thread Pool Size: %d\n", t->size);
   tpool_print_current_active_threads(t);
   request_queue_print_current_size(t->q);
@@ -338,11 +339,12 @@ static void print_current_statistics()
 
 static void print_average_statistics()
 {
-  // Print average statistics
   struct tpool *t = &tpool;
   struct cpu_util *c = &cpu_util;
 
+  // Print average statistics
   printf("\n");
+  printf("Lifetime Average Statistics\n");
   printf("Thread Pool Size: %d\n", t->size);
   tpool_print_average_active_threads(t);
   request_queue_print_average_size(t->q);
