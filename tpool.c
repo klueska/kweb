@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <linux/futex.h>
 #include <pthread.h>
 #include <limits.h>
@@ -65,5 +66,34 @@ int tpool_init(struct tpool *t, int size, struct request_queue *q,
 void tpool_wake(struct tpool *t, int count)
 {
   futex_wake(&t->q->total_enqueued, count);
+}
+
+int tpool_get_current_active_threads(struct tpool *t)
+{
+  spinlock_lock(&t->lock);
+  int active_threads = t->active_threads;
+  spinlock_unlock(&t->lock);
+  return active_threads;
+}
+
+double tpool_get_average_active_threads(struct tpool *t)
+{
+  spinlock_lock(&t->lock);
+  double average = t->active_threads_samples ? 
+                   t->active_threads_sum/t->active_threads_samples : 0;
+  spinlock_unlock(&t->lock);
+  return average;
+}
+
+void tpool_print_current_active_threads(struct tpool *t)
+{
+  int active_threads = tpool_get_current_active_threads(t);
+  printf("Current active threads: %d\n", active_threads);
+}
+
+void tpool_print_average_active_threads(struct tpool *t)
+{
+  double average = tpool_get_average_active_threads(t);
+  printf("Average active threads: %lf\n", average);
 }
 

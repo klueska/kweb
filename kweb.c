@@ -322,16 +322,8 @@ void print_statistics()
 {
   printf("\n");
   struct tpool *t = &tpool;
-  double average = 0;
   printf("Thread Pool Size: %d\n", t->size);
-  average = t->q->total_enqueued ? 
-              t->q->size_sum/t->q->total_enqueued : 0;
-  printf("Average request queue length: %lf\n", average);
-  average = t->q->zombie_total_enqueued ? 
-              t->q->zombie_size_sum/t->q->zombie_total_enqueued : 0;
-  printf("Average zombie queue length: %lf\n", average);
-  average = t->active_threads_samples ? 
-              t->active_threads_sum/t->active_threads_samples : 0;
-  printf("Average active threads: %lf\n", average);
+  request_queue_print_average_size(t->q);
+  tpool_print_average_active_threads(t);
   cpu_util_print_average(&cpu_util);
 }

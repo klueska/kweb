@@ -67,3 +67,32 @@ struct request *request_queue_dequeue_request(struct request_queue *q)
   return r;
 }
 
+int request_queue_get_current_size(struct request_queue *q)
+{
+  spinlock_lock(&q->lock);
+  int size = q->size;
+  spinlock_unlock(&q->lock);
+  return size;
+}
+
+double request_queue_get_average_size(struct request_queue *q)
+{
+  spinlock_lock(&q->lock);
+  double average = q->total_enqueued ? 
+                   q->size_sum/q->total_enqueued : 0;
+  spinlock_unlock(&q->lock);
+  return average;
+}
+
+void request_queue_print_current_size(struct request_queue *q)
+{
+  int size = request_queue_get_current_size(q);
+  printf("Current request queue length: %d\n", size);
+}
+
+void request_queue_print_average_size(struct request_queue *q)
+{
+  double average = request_queue_get_average_size(q);
+  printf("Average request queue length: %lf\n", average);
+}
+
