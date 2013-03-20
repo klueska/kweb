@@ -86,7 +86,7 @@ void http_server(struct request_queue *q, struct request *__r)
   /* Make sure it's a GET operation */
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
     logger(FORBIDDEN, "Only simple GET operation supported", request_line, r->socketfd);
-    write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+    write(r->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
     close(r->socketfd);
     return;
   }
@@ -104,7 +104,7 @@ void http_server(struct request_queue *q, struct request *__r)
   for(j=4; j<i-1; j++) {
     if(request_line[j] == '.' && request_line[j+1] == '.') {
       logger(FORBIDDEN, "Parent directory (..) path names not supported", request_line, r->socketfd);
-      write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+      write(r->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
       close(r->socketfd);
       return;
     }
@@ -131,7 +131,7 @@ void http_server(struct request_queue *q, struct request *__r)
   }
   if(fstr == 0) {
     logger(FORBIDDEN, "File extension type not supported", request_line, r->socketfd);
-    write(r->socketfd, page_data[FORBIDDEN_PAGE], 271);
+    write(r->socketfd, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
     close(r->socketfd);
     return;
   }
@@ -139,7 +139,7 @@ void http_server(struct request_queue *q, struct request *__r)
   /* Open the file for reading */
   if((file_fd = open(&request_line[5], O_RDONLY)) == -1) {
     logger(NOTFOUND, "Failed to open file", &request_line[5], r->socketfd);
-    write(r->socketfd, page_data[NOTFOUND_PAGE], 224);
+    write(r->socketfd, page_data[NOTFOUND_PAGE], strlen(page_data[NOTFOUND_PAGE]));
     close(r->socketfd);
     return;
   }
@@ -157,7 +157,7 @@ void http_server(struct request_queue *q, struct request *__r)
   write(r->socketfd, r->buffer, strlen(r->buffer));
 
   /* Send the file itself in 8KB chunks - last block may be smaller */
-  while((ret = read(file_fd, r->buffer, BUFSIZE)) > 0) {
+  while((ret = read(file_fd, r->buffer, sizeof(r->buffer))) > 0) {
     write(r->socketfd, r->buffer, ret);
   }
   close(file_fd);

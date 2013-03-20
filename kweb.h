@@ -47,10 +47,10 @@ enum {
   OK_HEADER,
 };
 char *page_data[] = {
-  "HTTP/1.1 403 Forbidden\n"
-  "Content-Length: 185\n"
-  "Connection: close\n"
-  "Content-Type: text/html\n\n"
+  "HTTP/1.1 403 Forbidden\r\n"
+  "Content-Length: 185\r\n"
+  "Connection: close\r\n"
+  "Content-Type: text/html\r\n\r\n"
   "<html><head>\n"
   "<title>403 Forbidden</title>\n"
   "</head><body>\n"
@@ -58,10 +58,10 @@ char *page_data[] = {
   "The requested URL, file type or operation is not allowed on this simple static file webserver.\n"
   "</body></html>\n",
 
-  "HTTP/1.1 404 Not Found\n"
-  "Content-Length: 136\n"
-  "Connection: close\n"
-  "Content-Type: text/html\n\n"
+  "HTTP/1.1 404 Not Found\r\n"
+  "Content-Length: 136\r\n"
+  "Connection: close\r\n"
+  "Content-Type: text/html\r\n\r\n"
   "<html><head>\n"
   "<title>404 Not Found</title>\n"
   "</head><body>\n"
@@ -69,11 +69,11 @@ char *page_data[] = {
   "The requested URL was not found on this server.\n"
   "</body></html>\n",
 
-  "HTTP/1.1 200 OK\n"
-  "Server: kweb/%s\n"
-  "Content-Length: %ld\n"
-  "Connection: close\n"
-  "Content-Type: %s\n\n"
+  "HTTP/1.1 200 OK\r\n"
+  "Server: kweb/%s\r\n"
+  "Content-Length: %ld\r\n"
+  "Connection: close\r\n"
+  "Content-Type: %s\r\n\r\n"
 };
 
 #ifndef DEBUG
