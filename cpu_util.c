@@ -70,17 +70,21 @@ static void __cpu_util_update(struct cpu_util *c)
   int res1 = __set_cpu_time(c, &c->cpu_time_after);
   int res2 = __set_proc_time(c, &c->proc_time_after);
   
-  double cpu_time_diff = c->cpu_time_after - c->cpu_time_before;
-  if((res1 > 0) && (res2 > 0) && (cpu_time_diff > 0)) {
-    c->proc_util_samples++;
-    double user_util = 
-      100 * (c->proc_time_after.user - c->proc_time_before.user) / cpu_time_diff;
-    double sys_util = 
-      100 * (c->proc_time_after.sys - c->proc_time_before.sys) / cpu_time_diff;
-    c->proc_util_current.user = user_util;
-    c->proc_util_current.sys = sys_util;
-    c->proc_util_sum.user += user_util;
-    c->proc_util_sum.sys += sys_util;
+  if((res1 > 0) && (res2 > 0)) {
+    double cpu_time_diff = c->cpu_time_after - c->cpu_time_before;
+    double user_time_diff = c->proc_time_after.user - c->proc_time_before.user;
+    double sys_time_diff = c->proc_time_after.sys - c->proc_time_before.sys;
+    if((cpu_time_diff > 0) && (user_time_diff > 0) && (sys_time_diff > 0)) {
+      double user_util = 100*user_time_diff/cpu_time_diff;
+      double sys_util = 100*sys_time_diff/cpu_time_diff;
+      if((user_util+sys_util) <= 100) {
+        c->proc_util_samples++;
+        c->proc_util_current.user = user_util;
+        c->proc_util_current.sys = sys_util;
+        c->proc_util_sum.user += user_util;
+        c->proc_util_sum.sys += sys_util;
+      }
+    }
   }
 }
 
