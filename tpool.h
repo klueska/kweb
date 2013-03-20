@@ -4,16 +4,18 @@
 #include "spinlock.h"
 #include "request_queue.h"
 
+struct tpool_stats {
+  int active_threads;
+  double active_threads_sum;
+  int active_threads_samples;
+};
+
 struct tpool {
   int size;
   struct request_queue *q;
   void (*func)(struct request_queue *, struct request *);
-
   spinlock_t lock;
-
-  int active_threads;
-  double active_threads_sum;
-  int active_threads_samples;
+  struct tpool_stats stats;
 };
 
 int tpool_init(struct tpool *t, int size, struct request_queue *q,

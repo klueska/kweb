@@ -11,16 +11,16 @@ static void *__thread_wrapper(void *arg)
   struct tpool *t = (struct tpool*)arg;
 
   spinlock_lock(&t->lock);
-  t->active_threads++;
+  t->stats.active_threads++;
   spinlock_unlock(&t->lock);
 
   while(1) {
     spinlock_lock(&t->lock);
-    t->active_threads_sum += t->active_threads;
-    t->active_threads_samples++;
+    t->stats.active_threads_sum += t->stats.active_threads;
+    t->stats.active_threads_samples++;
     struct request *r = request_queue_dequeue_request(t->q);
     if(r == NULL) {
-      t->active_threads--;
+      t->stats.active_threads--;
       total_enqueued = t->q->qstats.total_enqueued;
     }
     spinlock_unlock(&t->lock);
@@ -31,7 +31,7 @@ static void *__thread_wrapper(void *arg)
     else {
       futex_wait(&t->q->qstats.total_enqueued, total_enqueued);
       spinlock_lock(&t->lock);
-      t->active_threads++;
+      t->stats.active_threads++;
       spinlock_unlock(&t->lock);
     }
   }
@@ -40,14 +40,13 @@ static void *__thread_wrapper(void *arg)
 int tpool_init(struct tpool *t, int size, struct request_queue *q,
                void (*func)(struct request_queue *, struct request *))
 {
-  t->q = q;
   t->size = 0;
+  t->q = q;
   t->func = func;
-  t->active_threads = 0;
-  t->active_threads_sum = 0;
-  t->active_threads_samples = 0;
-
   spinlock_init(&t->lock);
+  t->stats.active_threads = 0;
+  t->stats.active_threads_sum = 0;
+  t->stats.active_threads_samples = 0;
 
   pthread_t thread;
   pthread_attr_t attr;
@@ -71,7 +70,7 @@ void tpool_wake(struct tpool *t, int count)
 int tpool_get_current_active_threads(struct tpool *t)
 {
   spinlock_lock(&t->lock);
-  int active_threads = t->active_threads;
+  int active_threads = t->stats.active_threads;
   spinlock_unlock(&t->lock);
   return active_threads;
 }
@@ -79,8 +78,8 @@ int tpool_get_current_active_threads(struct tpool *t)
 double tpool_get_average_active_threads(struct tpool *t)
 {
   spinlock_lock(&t->lock);
-  double average = t->active_threads_samples ? 
-                   t->active_threads_sum/t->active_threads_samples : 0;
+  double average = t->stats.active_threads_samples ? 
+                   t->stats.active_threads_sum/t->stats.active_threads_samples : 0;
   spinlock_unlock(&t->lock);
   return average;
 }
