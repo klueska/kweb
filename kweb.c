@@ -303,9 +303,12 @@ int main(int argc, char **argv)
 
 void cpu_util_callback(struct cpu_util *c, void *arg)
 {
-  // Collect statistics
-  //cpu_util__current(c);
-  //cpu_util_get_average(c);
+  // Print current statistics
+  struct tpool *t = &tpool;
+  printf("\n");
+  tpool_print_current_active_threads(t);
+  request_queue_print_current_size(t->q);
+  cpu_util_print_current(c);
 }
 
 void sig_exit(int signo)
