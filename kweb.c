@@ -15,14 +15,17 @@
 #include <signal.h>
 #include "kweb.h"
 #include "cpu_util.h"
-
-void cpu_util_callback(struct cpu_util *c, void *arg);
-void sig_exit(int signo);
-void print_statistics();
+#include "ktimer.h"
 
 static int listenfd;
+static struct ktimer ktimer;
 static struct tpool tpool;
 static struct cpu_util cpu_util;
+
+static void sig_exit(int signo);
+static void ktimer_callback(void *arg);
+static void print_current_statistics();
+static void print_average_statistics();
 
 static long buffer_next_or_finish(struct http_request *r)
 {
@@ -279,8 +282,9 @@ int main(int argc, char **argv)
   struct request_queue q;
   request_queue_init(&q, sizeof(struct http_request));
   tpool_init(&tpool, tpool_size, &q, http_server);
-  cpu_util_init(&cpu_util, 1000, cpu_util_callback, NULL);
-  cpu_util_start(&cpu_util);
+  cpu_util_init(&cpu_util);
+  ktimer_init(&ktimer, 1000, ktimer_callback, NULL);
+  ktimer_start(&ktimer);
 
   length = sizeof(cli_addr);
   for(;;) {
@@ -302,32 +306,45 @@ int main(int argc, char **argv)
   }
 }
 
-void cpu_util_callback(struct cpu_util *c, void *arg)
+static void sig_exit(int signo)
+{
+  if(signo == SIGINT) {
+    ktimer_stop(&ktimer);
+    cpu_util_fini(&cpu_util);
+    close(listenfd);
+    print_average_statistics();
+    exit(0);
+  }
+}
+
+static void ktimer_callback(void *arg)
+{
+  cpu_util_update(&cpu_util);
+  print_current_statistics();
+}
+
+static void print_current_statistics()
 {
   // Print current statistics
   struct tpool *t = &tpool;
+  struct cpu_util *c = &cpu_util;
+
   printf("\n");
+  printf("Thread Pool Size: %d\n", t->size);
   tpool_print_current_active_threads(t);
   request_queue_print_current_size(t->q);
   cpu_util_print_current(c);
 }
 
-void sig_exit(int signo)
+static void print_average_statistics()
 {
-  if(signo == SIGINT) {
-    cpu_util_stop(&cpu_util);
-    close(listenfd);
-    print_statistics();
-    exit(0);
-  }
-}
-
-void print_statistics()
-{
-  printf("\n");
+  // Print average statistics
   struct tpool *t = &tpool;
+  struct cpu_util *c = &cpu_util;
+
+  printf("\n");
   printf("Thread Pool Size: %d\n", t->size);
-  request_queue_print_average_size(t->q);
   tpool_print_average_active_threads(t);
-  cpu_util_print_average(&cpu_util);
+  request_queue_print_average_size(t->q);
+  cpu_util_print_average(c);
 }

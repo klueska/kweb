@@ -8,13 +8,6 @@
 #include <limits.h>
 #include "cpu_util.h"
 
-enum {
-  CPU_UTIL_STARTING,
-  CPU_UTIL_STARTED,
-  CPU_UTIL_STOPPING,
-  CPU_UTIL_STOPPED,
-};
-
 static int __set_cpu_time(struct cpu_util *c, double *cpu_time)
 {
   int res = 0;
@@ -111,43 +104,15 @@ static void __cpu_util_print_average(struct cpu_util *c)
   printf("Average total cpu utilization: %lf%%\n", total_average);
 }
 
-static void *__periodic_update(void *arg)
+void cpu_util_init(struct cpu_util *c)
 {
-  struct cpu_util *c = (struct cpu_util*)arg;
-
-  c->state = CPU_UTIL_STARTED;
-  __set_cpu_time(c, &c->cpu_time_after);
-  __set_proc_time(c, &c->proc_time_after);
-
-  for(;;) {
-    usleep(1000*c->period_ms);
-
-    spinlock_lock(&c->lock);
-    if(c->state == CPU_UTIL_STOPPING)
-      break;
-    __cpu_util_update(c);
-    spinlock_unlock(&c->lock);
-
-    if(c->callback)
-      c->callback(c, c->callback_arg);
-  }
-  c->state = CPU_UTIL_STOPPED;
-  spinlock_unlock(&c->lock);
-}
-
-void cpu_util_init(struct cpu_util *c, useconds_t period_ms,
-                   void (*callback)(struct cpu_util*, void*), void* arg)
-{
-  c->state = CPU_UTIL_STOPPED;
-  c->period_ms = period_ms;
-  c->callback = callback;
-  c->callback_arg = arg;
+  char proc_stat_file[20];
+  c->stat_fd = open("/proc/stat", O_RDONLY);
+  sprintf(proc_stat_file, "/proc/%d/stat", getpid());
+  c->proc_stat_fd = open(proc_stat_file, O_RDONLY);
+  memset(c->buffer, 0, sizeof(c->buffer));
 
   spinlock_init(&c->lock);
-
-  c->stat_fd = -1;
-  c->proc_stat_fd = -1;
-  memset(c->buffer, 0, sizeof(c->buffer));
 
   c->proc_util_samples = 0;
   c->proc_util_current.user = 0.0;
@@ -159,39 +124,12 @@ void cpu_util_init(struct cpu_util *c, useconds_t period_ms,
   c->proc_time_before.user = 0.0;
   c->proc_time_before.sys = 0.0;
 
-  c->cpu_time_after = 0.0;
-  c->proc_time_after.user = 0.0;
-  c->proc_time_after.sys = 0.0;
+  __set_cpu_time(c, &c->cpu_time_after);
+  __set_proc_time(c, &c->proc_time_after);
 }
 
-int cpu_util_start(struct cpu_util *c)
+void cpu_util_fini(struct cpu_util *c)
 {
-  if(c->state != CPU_UTIL_STOPPED)
-    return -1;
-  c->state = CPU_UTIL_STARTING;
-
-  char proc_stat_file[20];
-  c->stat_fd = open("/proc/stat", O_RDONLY);
-  sprintf(proc_stat_file, "/proc/%d/stat", getpid());
-  c->proc_stat_fd = open(proc_stat_file, O_RDONLY);
-
-  pthread_t thread;
-  pthread_attr_t attr;
-  pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN);
-  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-  pthread_create(&thread, &attr, __periodic_update, c);
-}
-
-int cpu_util_stop(struct cpu_util *c)
-{
-  if(c->state != CPU_UTIL_STARTED)
-    return -1;
-
-  spinlock_lock(&c->lock);
-  c->state = CPU_UTIL_STOPPING;
-  spinlock_unlock(&c->lock);
-
   close(c->stat_fd);
   close(c->proc_stat_fd);
 }
