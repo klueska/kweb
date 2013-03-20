@@ -18,7 +18,7 @@ enum {
 static int __set_cpu_time(struct cpu_util *c, double *cpu_time)
 {
   int res = 0;
-  long time = 0;
+  double time = 0;
 
   lseek(c->stat_fd, 0, SEEK_SET);
   res = read(c->stat_fd, c->buffer, sizeof(c->buffer));
