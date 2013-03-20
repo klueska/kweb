@@ -19,19 +19,20 @@ static int __set_cpu_time(struct cpu_util *c, double *cpu_time)
 {
   int res = 0;
   double time = 0;
+  char *saveptr;
 
   lseek(c->stat_fd, 0, SEEK_SET);
   res = read(c->stat_fd, c->buffer, sizeof(c->buffer));
 
   if(res > 0) {
-    char *line = strtok(c->buffer, "\n");
+    char *line = strtok_r(c->buffer, "\n", &saveptr);
     if(line == NULL)
       return -1;
-    char *field = strtok(line, " ");
-    field = strtok(NULL, " ");
+    char *field = strtok_r(line, " ", &saveptr);
+    field = strtok_r(NULL, " ", &saveptr);
     while(field != NULL) {
       time += atof(field);
-      field = strtok(NULL, " ");
+      field = strtok_r(NULL, " ", &saveptr);
     }
     *cpu_time = time;
   }
@@ -42,20 +43,20 @@ static int __set_proc_time(struct cpu_util *c, struct proc_stats *proc_time)
 {
   int res = 0;
   struct proc_stats time = {0, 0};
+  char *saveptr;
 
   lseek(c->proc_stat_fd, 0, SEEK_SET);
   res = read(c->proc_stat_fd, c->buffer, sizeof(c->buffer));
 
   if(res > 0) {
-    char *field = strtok(c->buffer, " ");
+    char *line = strtok_r(c->buffer, "\n", &saveptr);
+    if(line == NULL)
+      return -1;
+    char *field = strtok_r(c->buffer, " ", &saveptr);
     for(int i=1; i<14; i++)
-      field = strtok(NULL, " ");
-    if(field == NULL)
-      return -1;
+      field = strtok_r(NULL, " ", &saveptr);
     time.user = atof(field);
-    field = strtok(NULL, " ");
-    if(field == NULL)
-      return -1;
+    field = strtok_r(NULL, " ", &saveptr);
     time.sys = atof(field);
     *proc_time = time;
   }

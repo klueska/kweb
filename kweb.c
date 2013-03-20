@@ -67,6 +67,7 @@ void http_server(struct request_queue *q, struct request *__r)
   long i = 0, ret = 0, len = 0;
   char *fstr;
   char *request_line;
+  char *saveptr;
 
   /* If this is a new request, buffer it up,
    * or destroy it and return if that is unsuccessful. */
@@ -81,7 +82,7 @@ void http_server(struct request_queue *q, struct request *__r)
   /* Otherwise ...
    * Parse through the request, grabbing only what we care about */
   logger(LOG, "Request", r->buffer, r->req.id);
-  request_line = strtok(r->buffer, "\r\n");
+  request_line = strtok_r(r->buffer, "\r\n", &saveptr);
 
   /* Make sure it's a GET operation */
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
