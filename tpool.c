@@ -21,7 +21,7 @@ static void *__thread_wrapper(void *arg)
     struct request *r = request_queue_dequeue_request(t->q);
     if(r == NULL) {
       t->active_threads--;
-      total_enqueued = t->q->total_enqueued;
+      total_enqueued = t->q->qstats.total_enqueued;
     }
     spinlock_unlock(&t->lock);
 
@@ -29,7 +29,7 @@ static void *__thread_wrapper(void *arg)
      t->func(t->q, r);
     }
     else {
-      futex_wait(&t->q->total_enqueued, total_enqueued);
+      futex_wait(&t->q->qstats.total_enqueued, total_enqueued);
       spinlock_lock(&t->lock);
       t->active_threads++;
       spinlock_unlock(&t->lock);
@@ -65,7 +65,7 @@ int tpool_init(struct tpool *t, int size, struct request_queue *q,
 
 void tpool_wake(struct tpool *t, int count)
 {
-  futex_wake(&t->q->total_enqueued, count);
+  futex_wake(&t->q->qstats.total_enqueued, count);
 }
 
 int tpool_get_current_active_threads(struct tpool *t)

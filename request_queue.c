@@ -5,17 +5,17 @@ void request_queue_init(struct request_queue *q, int request_size)
 {
   q->request_size = request_size;
 
-  q->total_enqueued = 0;
-  q->size = 0;
-  q->size_sum = 0;
   SIMPLEQ_INIT(&q->queue);
   spinlock_init(&q->lock);
+  q->qstats.size = 0;
+  q->qstats.size_sum = 0;
+  q->qstats.total_enqueued = 0;
 
-  q->zombie_total_enqueued = 0;
-  q->zombie_size = 0;
-  q->zombie_size_sum = 0;
   SIMPLEQ_INIT(&q->zombie_queue);
   spinlock_init(&q->zombie_lock);
+  q->zombie_qstats.size = 0;
+  q->zombie_qstats.size_sum = 0;
+  q->zombie_qstats.total_enqueued = 0;
 }
 
 void *request_queue_create_request(struct request_queue *q)
@@ -23,7 +23,7 @@ void *request_queue_create_request(struct request_queue *q)
   spinlock_lock(&q->zombie_lock);
   struct request *r = SIMPLEQ_FIRST(&q->zombie_queue);
   if(r) {
-    q->zombie_size--;
+    q->zombie_qstats.size--;
     SIMPLEQ_REMOVE_HEAD(&q->zombie_queue, link);
   }
   spinlock_unlock(&q->zombie_lock);
@@ -38,9 +38,8 @@ void *request_queue_create_request(struct request_queue *q)
 void request_queue_destroy_request(struct request_queue *q, struct request *r)
 {
   spinlock_lock(&q->zombie_lock);
-  q->zombie_total_enqueued++;
-  q->zombie_size++;
-  q->zombie_size_sum += q->zombie_size;
+  q->zombie_qstats.size_sum += q->zombie_qstats.size++;
+  q->zombie_qstats.total_enqueued++;
   SIMPLEQ_INSERT_HEAD(&q->zombie_queue, r, link);
   spinlock_unlock(&q->zombie_lock);
 }
@@ -48,9 +47,8 @@ void request_queue_destroy_request(struct request_queue *q, struct request *r)
 void request_queue_enqueue_request(struct request_queue *q, struct request *r)
 {
   spinlock_lock(&q->lock);
-  q->size_sum += q->size;
-  r->id = q->total_enqueued++;
-  q->size++;
+  q->qstats.size_sum += q->qstats.size++;
+  r->id = q->qstats.total_enqueued++;
   SIMPLEQ_INSERT_TAIL(&q->queue, r, link);
   spinlock_unlock(&q->lock);
 }
@@ -60,7 +58,7 @@ struct request *request_queue_dequeue_request(struct request_queue *q)
   spinlock_lock(&q->lock);
   struct request *r = SIMPLEQ_FIRST(&q->queue);
   if(r) {
-    q->size--;
+    q->qstats.size--;
     SIMPLEQ_REMOVE_HEAD(&q->queue, link);
   }
   spinlock_unlock(&q->lock);
@@ -70,7 +68,7 @@ struct request *request_queue_dequeue_request(struct request_queue *q)
 int request_queue_get_current_size(struct request_queue *q)
 {
   spinlock_lock(&q->lock);
-  int size = q->size;
+  int size = q->qstats.size;
   spinlock_unlock(&q->lock);
   return size;
 }
@@ -78,8 +76,8 @@ int request_queue_get_current_size(struct request_queue *q)
 double request_queue_get_average_size(struct request_queue *q)
 {
   spinlock_lock(&q->lock);
-  double average = q->total_enqueued ? 
-                   q->size_sum/q->total_enqueued : 0;
+  double average = q->qstats.total_enqueued ? 
+                   q->qstats.size_sum/q->qstats.total_enqueued : 0;
   spinlock_unlock(&q->lock);
   return average;
 }

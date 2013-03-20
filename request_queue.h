@@ -8,21 +8,24 @@ struct request {
   SIMPLEQ_ENTRY(request) link;
   int id;
 };
+
+struct request_queue_stats {
+  int size;
+  double size_sum;
+  int total_enqueued;
+};
+
 SIMPLEQ_HEAD(__request_queue, request);
 struct request_queue {
   int request_size;
 
-  int total_enqueued;
-  int size;
-  double size_sum;
   spinlock_t lock;
   struct __request_queue queue;
+  struct request_queue_stats qstats;
 
-  int zombie_total_enqueued;
-  int zombie_size;
-  double zombie_size_sum;
   spinlock_t zombie_lock;
   struct __request_queue zombie_queue;
+  struct request_queue_stats zombie_qstats;
 };
 
 void request_queue_init(struct request_queue *q, int request_size);
