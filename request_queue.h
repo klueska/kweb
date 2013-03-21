@@ -35,7 +35,13 @@ void request_queue_enqueue_request(struct request_queue *q, struct request *r);
 struct request *request_queue_dequeue_request(struct request_queue *q);
 
 struct request_queue_stats request_queue_get_stats(struct request_queue *q);
-void request_queue_print_current_size(struct request_queue *q);
-void request_queue_print_average_size(struct request_queue *q);
+int request_queue_get_total_enqueued(struct request_queue_stats *last,
+                                     struct request_queue_stats *current);
+double request_queue_get_average_size(struct request_queue_stats *last,
+                                      struct request_queue_stats *current);
+void request_queue_print_total_enqueued(struct request_queue_stats *last,
+                                        struct request_queue_stats *current);
+void request_queue_print_average_size(struct request_queue_stats *last,
+                                      struct request_queue_stats *current);
 
 #endif // REQUEST_QUEUE_H

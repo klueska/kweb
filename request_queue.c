@@ -73,18 +73,31 @@ struct request_queue_stats request_queue_get_stats(struct request_queue *q)
   return s;
 }
 
-void request_queue_print_current_size(struct request_queue *q)
+double request_queue_get_average_size(struct request_queue_stats *last,
+                                      struct request_queue_stats *current)
 {
-  struct request_queue_stats s = request_queue_get_stats(q);
-  printf("Current request queue length: %d\n", s.size);
+  int total_enqueued = current->total_enqueued - last->total_enqueued; 
+  double size_sum = current->size_sum - last->size_sum; 
+  return total_enqueued ? size_sum/total_enqueued : 0;
 }
 
-void request_queue_print_average_size(struct request_queue *q)
+int request_queue_get_total_enqueued(struct request_queue_stats *last,
+                                     struct request_queue_stats *current)
 {
-  spinlock_lock(&q->lock);
-  double average = q->qstats.total_enqueued ? 
-                   q->qstats.size_sum/q->qstats.total_enqueued : 0;
-  spinlock_unlock(&q->lock);
+  return current->total_enqueued - last->total_enqueued; 
+}
+
+void request_queue_print_total_enqueued(struct request_queue_stats *last,
+                                        struct request_queue_stats *current)
+{
+  int total_enqueued = request_queue_get_total_enqueued(last, current);
+  printf("Total requests enqueued: %d\n", total_enqueued);
+}
+
+void request_queue_print_average_size(struct request_queue_stats *last,
+                                      struct request_queue_stats *current)
+{
+  double average = request_queue_get_average_size(last, current);
   printf("Average request queue length: %lf\n", average);
 }
 

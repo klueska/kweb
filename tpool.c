@@ -75,18 +75,18 @@ struct tpool_stats tpool_get_stats(struct tpool *t)
   return s;
 }
 
-void tpool_print_current_active_threads(struct tpool *t)
+double tpool_get_average_active_threads(struct tpool_stats *last,
+                                        struct tpool_stats *current)
 {
-  struct tpool_stats s = tpool_get_stats(t);
-  printf("Current active threads: %d\n", s.active_threads);
+  int active_threads_samples = current->active_threads_samples - last->active_threads_samples;
+  double active_threads_sum = current->active_threads_sum - last->active_threads_sum;
+  return active_threads_samples ?  active_threads_sum/active_threads_samples : 0;
 }
 
-void tpool_print_average_active_threads(struct tpool *t)
+void tpool_print_average_active_threads(struct tpool_stats *last,
+                                        struct tpool_stats *current)
 {
-  spinlock_lock(&t->lock);
-  double average = t->stats.active_threads_samples ? 
-                   t->stats.active_threads_sum/t->stats.active_threads_samples : 0;
-  spinlock_unlock(&t->lock);
+  double average = tpool_get_average_active_threads(last, current);
   printf("Average active threads: %lf\n", average);
 }
 
