@@ -343,6 +343,7 @@ static void print_current_statistics()
   printf("Thread Pool Size: %d\n", t->size);
   tpool_print_average_active_threads(&tpstats_last, &tpstats_current);
   request_queue_print_total_enqueued(&rqstats_last, &rqstats_current);
+  tpool_print_requests_processed(&tpstats_last, &tpstats_current);
   request_queue_print_average_size(&rqstats_last, &rqstats_current);
   cpu_util_print_current(c);
 }
@@ -358,6 +359,7 @@ static void print_average_statistics()
   printf("Thread Pool Size: %d\n", t->size);
   tpool_print_average_active_threads(&((struct tpool_stats){0}), &tpstats_current);
   request_queue_print_total_enqueued(&((struct request_queue_stats){0}), &rqstats_current);
+  tpool_print_requests_processed(&((struct tpool_stats){0}), &tpstats_current);
   request_queue_print_average_size(&((struct request_queue_stats){0}), &rqstats_current);
   cpu_util_print_average(c);
 }

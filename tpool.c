@@ -26,7 +26,10 @@ static void *__thread_wrapper(void *arg)
     spinlock_unlock(&t->lock);
 
     if(r) {
-     t->func(t->q, r);
+      t->func(t->q, r);
+      spinlock_lock(&t->lock);
+      t->stats.requests_processed++;
+      spinlock_unlock(&t->lock);
     }
     else {
       futex_wait(&t->q->qstats.total_enqueued, total_enqueued);
@@ -47,6 +50,7 @@ int tpool_init(struct tpool *t, int size, struct request_queue *q,
   t->stats.active_threads = 0;
   t->stats.active_threads_sum = 0;
   t->stats.active_threads_samples = 0;
+  t->stats.requests_processed = 0;
 
   pthread_t thread;
   pthread_attr_t attr;
@@ -75,12 +79,25 @@ struct tpool_stats tpool_get_stats(struct tpool *t)
   return s;
 }
 
+int tpool_get_requests_processed(struct tpool_stats *last,
+                                 struct tpool_stats *current)
+{
+  return current->requests_processed - last->requests_processed;
+}
+
 double tpool_get_average_active_threads(struct tpool_stats *last,
                                         struct tpool_stats *current)
 {
   int active_threads_samples = current->active_threads_samples - last->active_threads_samples;
   double active_threads_sum = current->active_threads_sum - last->active_threads_sum;
   return active_threads_samples ?  active_threads_sum/active_threads_samples : 0;
+}
+
+void tpool_print_requests_processed(struct tpool_stats *last,
+                                    struct tpool_stats *current)
+{
+  int requests_processed = tpool_get_requests_processed(last, current);
+  printf("Total requests processed: %d\n", requests_processed);
 }
 
 void tpool_print_average_active_threads(struct tpool_stats *last,
