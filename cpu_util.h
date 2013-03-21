@@ -10,6 +10,10 @@ struct proc_load {
 };
 
 struct cpu_util_stats {
+  double initial_cpu_time;
+  double initial_proc_user_time;
+  double initial_proc_sys_time;
+
   double cpu_time;
   double proc_user_time;
   double proc_sys_time;

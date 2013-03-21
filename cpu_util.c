@@ -58,6 +58,9 @@ static void __cpu_util_update(struct cpu_util *c)
 {
   __set_cpu_time(c);
   __set_proc_time(c);
+  c->stats.cpu_time -= c->stats.initial_cpu_time;
+  c->stats.proc_user_time -= c->stats.initial_proc_user_time;
+  c->stats.proc_sys_time -= c->stats.initial_proc_sys_time;
 }
 
 void cpu_util_init(struct cpu_util *c)
@@ -68,6 +71,12 @@ void cpu_util_init(struct cpu_util *c)
   c->proc_stat_fd = open(proc_stat_file, O_RDONLY);
   memset(c->buffer, 0, sizeof(c->buffer));
   spinlock_init(&c->lock);
+
+  __set_cpu_time(c);
+  __set_proc_time(c);
+  c->stats.initial_cpu_time = c->stats.cpu_time;
+  c->stats.initial_proc_user_time = c->stats.proc_user_time;
+  c->stats.initial_proc_sys_time = c->stats.proc_sys_time;
 
   c->stats.cpu_time = 0.0;
   c->stats.proc_user_time = 0.0;
