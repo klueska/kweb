@@ -23,12 +23,12 @@ static struct request_queue request_queue;
 static struct tpool tpool;
 static struct cpu_util cpu_util;
 
-static struct request_queue_stats rqstats_last = {0};
-static struct request_queue_stats rqstats_current = {0};
-static struct tpool_stats tpstats_last = {0};
-static struct tpool_stats tpstats_current = {0};
-static struct cpu_util_stats custats_last = {0};
-static struct cpu_util_stats custats_current = {0};
+static struct request_queue_stats rqstats_prev = {0};
+static struct request_queue_stats rqstats_curr = {0};
+static struct tpool_stats tpstats_prev = {0};
+static struct tpool_stats tpstats_curr = {0};
+static struct cpu_util_stats custats_prev = {0};
+static struct cpu_util_stats custats_curr = {0};
 
 static void sig_exit(int signo);
 static void ktimer_callback(void *arg);
@@ -326,30 +326,30 @@ static void sig_exit(int signo)
 
 static void ktimer_callback(void *arg)
 {
-  rqstats_last = rqstats_current;
-  tpstats_last = tpstats_current;
-  custats_last = custats_current;
+  rqstats_prev = rqstats_curr;
+  tpstats_prev = tpstats_curr;
+  custats_prev = custats_curr;
 
-  rqstats_current = request_queue_get_stats(&request_queue);
-  tpstats_current = tpool_get_stats(&tpool);
-  custats_current = cpu_util_get_stats(&cpu_util);
+  rqstats_curr = request_queue_get_stats(&request_queue);
+  tpstats_curr = tpool_get_stats(&tpool);
+  custats_curr = cpu_util_get_stats(&cpu_util);
 
   print_interval_statistics();
 }
 
-static void print_statistics(struct request_queue_stats *rqlast,
-                             struct request_queue_stats *rqcurrent,
-                             struct tpool_stats *tplast,
-                             struct tpool_stats *tpcurrent,
-                             struct cpu_util_stats *culast,
-                             struct cpu_util_stats *cucurrent)
+static void print_statistics(struct request_queue_stats *rqprev,
+                             struct request_queue_stats *rqcurr,
+                             struct tpool_stats *tpprev,
+                             struct tpool_stats *tpcurr,
+                             struct cpu_util_stats *cuprev,
+                             struct cpu_util_stats *cucurr)
 {
   printf("Thread Pool Size: %d\n", tpool.size);
-  tpool_print_average_active_threads(tplast, tpcurrent);
-  request_queue_print_total_enqueued(rqlast, rqcurrent);
-  tpool_print_requests_processed(tplast, tpcurrent);
-  request_queue_print_average_size(rqlast, rqcurrent);
-  cpu_util_print_average_load(culast, cucurrent);
+  tpool_print_average_active_threads(tpprev, tpcurr);
+  request_queue_print_total_enqueued(rqprev, rqcurr);
+  tpool_print_requests_processed(tpprev, tpcurr);
+  request_queue_print_average_size(rqprev, rqcurr);
+  cpu_util_print_average_load(cuprev, cucurr);
 }
 
 static void print_interval_statistics()
@@ -357,17 +357,17 @@ static void print_interval_statistics()
   printf("\n");
   printf("Interval Average Statistics:\n");
   printf("Interval Length: %ld\n", ktimer.period_ms);
-  print_statistics(&rqstats_last, &rqstats_current,
-                   &tpstats_last, &tpstats_current,
-                   &custats_last, &custats_current);
+  print_statistics(&rqstats_prev, &rqstats_curr,
+                   &tpstats_prev, &tpstats_curr,
+                   &custats_prev, &custats_curr);
 }
 
 static void print_lifetime_statistics()
 {
   printf("\n");
   printf("Lifetime Average Statistics:\n");
-  print_statistics(&((struct request_queue_stats){0}), &rqstats_current,
-                   &((struct tpool_stats){0}), &tpstats_current,
-                   &((struct cpu_util_stats){0}), &custats_current);
+  print_statistics(&((struct request_queue_stats){0}), &rqstats_curr,
+                   &((struct tpool_stats){0}), &tpstats_curr,
+                   &((struct cpu_util_stats){0}), &custats_curr);
 }
 

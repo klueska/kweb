@@ -79,31 +79,31 @@ struct tpool_stats tpool_get_stats(struct tpool *t)
   return s;
 }
 
-int tpool_get_requests_processed(struct tpool_stats *last,
-                                 struct tpool_stats *current)
+int tpool_get_requests_processed(struct tpool_stats *prev,
+                                 struct tpool_stats *curr)
 {
-  return current->requests_processed - last->requests_processed;
+  return curr->requests_processed - prev->requests_processed;
 }
 
-double tpool_get_average_active_threads(struct tpool_stats *last,
-                                        struct tpool_stats *current)
+double tpool_get_average_active_threads(struct tpool_stats *prev,
+                                        struct tpool_stats *curr)
 {
-  int active_threads_samples = current->active_threads_samples - last->active_threads_samples;
-  double active_threads_sum = current->active_threads_sum - last->active_threads_sum;
+  int active_threads_samples = curr->active_threads_samples - prev->active_threads_samples;
+  double active_threads_sum = curr->active_threads_sum - prev->active_threads_sum;
   return active_threads_samples ?  active_threads_sum/active_threads_samples : 0;
 }
 
-void tpool_print_requests_processed(struct tpool_stats *last,
-                                    struct tpool_stats *current)
+void tpool_print_requests_processed(struct tpool_stats *prev,
+                                    struct tpool_stats *curr)
 {
-  int requests_processed = tpool_get_requests_processed(last, current);
+  int requests_processed = tpool_get_requests_processed(prev, curr);
   printf("Total requests processed: %d\n", requests_processed);
 }
 
-void tpool_print_average_active_threads(struct tpool_stats *last,
-                                        struct tpool_stats *current)
+void tpool_print_average_active_threads(struct tpool_stats *prev,
+                                        struct tpool_stats *curr)
 {
-  double average = tpool_get_average_active_threads(last, current);
+  double average = tpool_get_average_active_threads(prev, curr);
   printf("Average active threads: %lf\n", average);
 }
 

@@ -98,22 +98,22 @@ struct cpu_util_stats cpu_util_get_stats(struct cpu_util *c)
   return s;
 }
 
-struct proc_load cpu_util_get_average_load(struct cpu_util_stats *last,
-                                           struct cpu_util_stats *current)
+struct proc_load cpu_util_get_average_load(struct cpu_util_stats *prev,
+                                           struct cpu_util_stats *curr)
 {
   struct proc_load proc_load;
-  double cpu_time = current->cpu_time - last->cpu_time;
-  double proc_user_time = current->proc_user_time - last->proc_user_time;
-  double proc_sys_time = current->proc_sys_time - last->proc_sys_time;
+  double cpu_time = curr->cpu_time - prev->cpu_time;
+  double proc_user_time = curr->proc_user_time - prev->proc_user_time;
+  double proc_sys_time = curr->proc_sys_time - prev->proc_sys_time;
   proc_load.user = 100*proc_user_time/cpu_time;
   proc_load.sys = 100*proc_sys_time/cpu_time;
   return proc_load;
 }
 
-void cpu_util_print_average_load(struct cpu_util_stats *last,
-                                 struct cpu_util_stats *current)
+void cpu_util_print_average_load(struct cpu_util_stats *prev,
+                                 struct cpu_util_stats *curr)
 {
-  struct proc_load l = cpu_util_get_average_load(last, current);
+  struct proc_load l = cpu_util_get_average_load(prev, curr);
   printf("Average user cpu load: %lf\n", l.user);
   printf("Average sys cpu load: %lf\n", l.sys);
   printf("Average total cpu load: %lf\n", l.user + l.sys);
