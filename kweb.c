@@ -19,12 +19,16 @@
 
 static int listenfd;
 static struct ktimer ktimer;
+static struct request_queue request_queue;
 static struct tpool tpool;
 static struct cpu_util cpu_util;
+
 static struct request_queue_stats rqstats_last = {0};
 static struct request_queue_stats rqstats_current = {0};
 static struct tpool_stats tpstats_last = {0};
 static struct tpool_stats tpstats_current = {0};
+static struct cpu_util_stats custats_last = {0};
+static struct cpu_util_stats custats_current = {0};
 
 static void sig_exit(int signo);
 static void ktimer_callback(void *arg);
@@ -283,9 +287,8 @@ int main(int argc, char **argv)
   fflush(stdout);
   logger(LOG, "Starting kweb", argv[1], getpid());
 
-  struct request_queue q;
-  request_queue_init(&q, sizeof(struct http_request));
-  tpool_init(&tpool, tpool_size, &q, http_server);
+  request_queue_init(&request_queue, sizeof(struct http_request));
+  tpool_init(&tpool, tpool_size, &request_queue, http_server);
   cpu_util_init(&cpu_util);
   ktimer_init(&ktimer, 1000, ktimer_callback, NULL);
   ktimer_start(&ktimer);
@@ -297,13 +300,13 @@ int main(int argc, char **argv)
     }
     else {
       struct http_request *r;
-      r = request_queue_create_request(&q);
+      r = request_queue_create_request(&request_queue);
       r->state = REQ_NEW;
       r->socketfd = socketfd;
       if(tpool_size == 0)
-        http_server(&q, &r->req);
+        http_server(&request_queue, &r->req);
       else {
-        request_queue_enqueue_request(&q, &r->req);
+        request_queue_enqueue_request(&request_queue, &r->req);
         tpool_wake(&tpool, 1);
       }
     }
@@ -323,12 +326,14 @@ static void sig_exit(int signo)
 
 static void ktimer_callback(void *arg)
 {
-  tpstats_last = tpstats_current;
   rqstats_last = rqstats_current;
-  tpstats_current = tpool_get_stats(&tpool);
-  rqstats_current = request_queue_get_stats(tpool.q);
+  tpstats_last = tpstats_current;
+  custats_last = custats_current;
 
-  cpu_util_update(&cpu_util);
+  rqstats_current = request_queue_get_stats(&request_queue);
+  tpstats_current = tpool_get_stats(&tpool);
+  custats_current = cpu_util_get_stats(&cpu_util);
+
   print_current_statistics();
 }
 
@@ -345,7 +350,7 @@ static void print_current_statistics()
   request_queue_print_total_enqueued(&rqstats_last, &rqstats_current);
   tpool_print_requests_processed(&tpstats_last, &tpstats_current);
   request_queue_print_average_size(&rqstats_last, &rqstats_current);
-  cpu_util_print_current(c);
+  cpu_util_print_average_load(&custats_last, &custats_current);
 }
 
 static void print_average_statistics()
@@ -361,5 +366,5 @@ static void print_average_statistics()
   request_queue_print_total_enqueued(&((struct request_queue_stats){0}), &rqstats_current);
   tpool_print_requests_processed(&((struct tpool_stats){0}), &tpstats_current);
   request_queue_print_average_size(&((struct request_queue_stats){0}), &rqstats_current);
-  cpu_util_print_average(c);
+  cpu_util_print_average_load(&((struct cpu_util_stats){0}), &custats_current);
 }

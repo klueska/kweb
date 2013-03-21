@@ -4,36 +4,33 @@
 #include <unistd.h>
 #include "spinlock.h"
 
-struct proc_stats {
+struct proc_load {
   double user;
   double sys;
 };
 
-struct cpu_util {
-  spinlock_t lock;
+struct cpu_util_stats {
+  double cpu_time;
+  double proc_user_time;
+  double proc_sys_time;
+};
 
+struct cpu_util {
   int stat_fd;
   int proc_stat_fd;
   char buffer[1024];
-
-  long proc_util_samples;
-  struct proc_stats proc_util_current;
-  struct proc_stats proc_util_sum;
-
-  double cpu_time_before;
-  struct proc_stats proc_time_before;
-
-  double cpu_time_after;
-  struct proc_stats proc_time_after;
+  spinlock_t lock;
+  struct cpu_util_stats stats;
 };
 
 void cpu_util_init(struct cpu_util *c);
 void cpu_util_fini(struct cpu_util *c);
-void cpu_util_update(struct cpu_util *c);
-struct proc_stats cpu_util_get_current(struct cpu_util *c);
-struct proc_stats cpu_util_get_average(struct cpu_util *c);
-void cpu_util_print_current(struct cpu_util *c);
-void cpu_util_print_average(struct cpu_util *c);
+
+struct cpu_util_stats cpu_util_get_stats(struct cpu_util *c);
+struct proc_load cpu_util_get_average_load(struct cpu_util_stats *last,
+                                           struct cpu_util_stats *current);
+void cpu_util_print_average_load(struct cpu_util_stats *last,
+                                 struct cpu_util_stats *current);
 
 #endif // CPU_UTIL_H
 
