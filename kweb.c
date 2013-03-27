@@ -151,15 +151,13 @@ static int intercept_url(char *url)
     }
     if(url[19] == '?')
       parse_query_string(&url[20], &query_params);
-
-    ktimer_init(&ktimer, query_params.period_ms, ktimer_callback, NULL);
     tpool_resize(&tpool, query_params.tpool_size);
 
     printf("Starting Measurements\n");
     printf("Interval Length: %ld\n", ktimer.period_ms);
     printf("Thread Pool Size: %d\n", tpool.size);
     printf("File Size: %d\n", query_params.file_size);
-    ktimer_start(&ktimer);
+    ktimer_start(&ktimer, query_params.period_ms);
     return 1;
   }
   if(!strcmp(url, "/stop_measurements")) {
@@ -449,6 +447,7 @@ int main(int argc, char **argv)
   kqueue_init(&kqueue, sizeof(struct http_connection));
   tpool_init(&tpool, tpool_size, &kqueue, http_server);
   cpu_util_init(&cpu_util);
+  ktimer_init(&ktimer, ktimer_callback, NULL);
 
   /* Get the TSC frequency for our timestamp measurements */
   server_stats.tsc_freq = get_tsc_freq();
