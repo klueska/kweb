@@ -112,10 +112,19 @@ static ssize_t timed_read(struct http_connection *c,
 static ssize_t timed_write(struct http_connection *c,
                            const void *buf, size_t count)
 {
+  int ret = 0;
+  int remaining = count;
   struct epoll_event event;
-  epoll_wait(c->epollwfd, &event, 1, KWEB_SWRITE_TIMEOUT);
-  return write(c->socketfd, buf, count);
+  while(remaining > 0) {
+    epoll_wait(c->epollwfd, &event, 1, KWEB_SWRITE_TIMEOUT);
+    ret = write(c->socketfd, buf, remaining);
+    if(ret < 0)
+      return ret;
+    remaining -= ret;
+  }
+  return count;
 }
+
 static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
 {
