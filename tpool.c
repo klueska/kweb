@@ -54,7 +54,7 @@ static void *__thread_wrapper(void *arg)
 
 static int create_threads(struct tpool *t, int num)
 {
-  int created;
+  int created = 0;
   pthread_t thread;
   pthread_attr_t attr;
   pthread_attr_init(&attr);
