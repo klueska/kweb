@@ -180,7 +180,7 @@ static void maybe_destroy_connection(struct kqueue *q,
   }
 }
 
-static ssize_t connection_write(struct http_connection *c,
+static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
 {
   pthread_mutex_lock(&c->writelock);
@@ -228,7 +228,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Make sure it's a GET operation */
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
     logger(FORBIDDEN, "Only simple GET operation supported", request_line, c->socketfd);
-    connection_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
+    serialized_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
     maybe_destroy_connection(q, c);
     return;
   }
@@ -248,7 +248,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
     /* Send the necessary header info + a blank line */
     logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
     sprintf(r.buf, page_data[OK_HEADER], VERSION, 0, "text/plain");
-    connection_write(c, r.buf, strlen(r.buf));
+    serialized_write(c, r.buf, strlen(r.buf));
     maybe_destroy_connection(q, c);
     return;
   }
@@ -266,7 +266,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   for(j=4; j<i-1; j++) {
     if(request_line[j] == '.' && request_line[j+1] == '.') {
       logger(FORBIDDEN, "Parent directory (..) path names not supported", request_line, c->socketfd);
-      connection_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
+      serialized_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
       maybe_destroy_connection(q, c);
       return;
     }
@@ -288,7 +288,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   }
   if(fstr == 0) {
     logger(FORBIDDEN, "File extension type not supported", request_line, c->socketfd);
-    connection_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
+    serialized_write(c, page_data[FORBIDDEN_PAGE], strlen(page_data[FORBIDDEN_PAGE]));
     maybe_destroy_connection(q, c);
     return;
   }
@@ -296,7 +296,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Open the file for reading */
   if((file_fd = open(&request_line[5], O_RDONLY)) == -1) {
     logger(NOTFOUND, "Failed to open file", &request_line[5], c->socketfd);
-    connection_write(c, page_data[NOTFOUND_PAGE], strlen(page_data[NOTFOUND_PAGE]));
+    serialized_write(c, page_data[NOTFOUND_PAGE], strlen(page_data[NOTFOUND_PAGE]));
     maybe_destroy_connection(q, c);
     return;
   }
