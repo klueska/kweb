@@ -36,7 +36,7 @@ void ktimer_init(struct ktimer *t, void (*callback)(void*), void* arg)
   spinlock_init(&t->lock);
 }
 
-int ktimer_start(struct ktimer *t, int period_ms)
+int ktimer_start(struct ktimer *t, unsigned int period_ms)
 {
   if(t->state != S_TIMER_STOPPED)
     return -1;
