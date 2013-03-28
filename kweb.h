@@ -1,6 +1,7 @@
 #ifndef KWEB_H
 #define KWEB_H
 
+#include <sys/epoll.h>
 #include "pthread.h"
 #include "kqueue.h"
 
@@ -14,6 +15,8 @@
 #define NOTFOUND   404
 
 #define MAX_BURST   10
+#define KWEB_SREAD_TIMEOUT  (1000*30)
+#define KWEB_SWRITE_TIMEOUT      (-1)
 
 enum {
   REQ_NEW,
@@ -38,6 +41,8 @@ struct http_connection {
   int buf_length;
   char buf[BUFSIZE+1];
   pthread_mutex_t writelock;
+  int epollrfd;
+  int epollwfd;
 };
 
 struct {

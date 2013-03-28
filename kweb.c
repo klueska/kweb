@@ -9,6 +9,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
+#include <sys/epoll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -83,6 +84,49 @@ static int intercept_url(char *url)
   return 0;
 }
 
+static int make_socket_non_blocking(int sfd)
+{
+  int flags, s;
+  flags = fcntl (sfd, F_GETFL, 0);
+  if(flags == -1) {
+    perror("fcntl");
+    return -1;
+  }
+  flags |= O_NONBLOCK;
+  s = fcntl (sfd, F_SETFL, flags);
+  if(s == -1) {
+    perror("fcntl");
+    return -1;
+  }
+  return 0;
+}
+
+static ssize_t timed_read(struct http_connection *c, 
+                          void *buf, size_t count)
+{
+  struct epoll_event event;
+  epoll_wait(c->epollrfd, &event, 1, KWEB_SREAD_TIMEOUT);
+  return read(c->socketfd, buf, count);
+}
+
+static ssize_t timed_write(struct http_connection *c,
+                           const void *buf, size_t count)
+{
+  struct epoll_event event;
+  epoll_wait(c->epollwfd, &event, 1, KWEB_SWRITE_TIMEOUT);
+  return write(c->socketfd, buf, count);
+}
+static ssize_t serialized_write(struct http_connection *c,
+                                const void *buf, size_t count)
+{
+  struct epoll_event event;
+  epoll_wait(c->epollwfd, &event, 1, KWEB_SWRITE_TIMEOUT);
+  pthread_mutex_lock(&c->writelock);
+  ssize_t ret = write(c->socketfd, buf, count);
+  pthread_mutex_unlock(&c->writelock);
+  return ret;
+}
+
 static int find_crlf(char *buf, int max_len)
 {
   int loc = -1;
@@ -148,8 +192,7 @@ static int extract_request(struct http_connection *c,
     }
 
     /* Otherwise, try and read in the next request from the socket */
-    ret = read(c->socketfd, &c->buf[c->buf_length],
-               sizeof(c->buf) - c->buf_length);   
+    ret = timed_read(c, &c->buf[c->buf_length], sizeof(c->buf) - c->buf_length);
 
 	/* If the return code is invalid or marks the end of a connection, just
      * return it. */
@@ -184,17 +227,10 @@ static void maybe_destroy_connection(struct kqueue *q,
   __sync_fetch_and_add(&c->ref_count, -1);
   if(c->ref_count == 0) {
     close(c->socketfd);
+    close(c->epollrfd);
+    close(c->epollwfd);
     kqueue_destroy_item(q, &c->conn);
   }
-}
-
-static ssize_t serialized_write(struct http_connection *c,
-                                const void *buf, size_t count)
-{
-  pthread_mutex_lock(&c->writelock);
-  ssize_t ret = write(c->socketfd, buf, count);
-  pthread_mutex_unlock(&c->writelock);
-  return ret;
 }
 
 /* This is a child web server thread */
@@ -327,13 +363,14 @@ void http_server(struct kqueue *q, struct kitem *__c)
   logger(LOG, "SEND", &request_line[5], c->conn.id);
 
   /* Send the necessary header info + a blank line */
-  pthread_mutex_lock(&c->writelock);
   sprintf(r.rsp_header, page_data[OK_HEADER], VERSION, len, fstr);
   logger(LOG, "Header", r.rsp_header, c->conn.id);
-  write(c->socketfd, r.rsp_header, strlen(r.rsp_header));
+
+  pthread_mutex_lock(&c->writelock);
+  timed_write(c, r.rsp_header, strlen(r.rsp_header));
   /* Send the file itself in 8KB chunks - last block may be smaller */
   do {
-    if(write(c->socketfd, r.buf, ret) < 0)
+    if(timed_write(c, r.buf, ret) < 0)
       logger(LOG, "Write error on socket.", "", c->socketfd);
   } while((ret = read(file_fd, r.buf, sizeof(r.buf))) > 0);
   pthread_mutex_unlock(&c->writelock);
@@ -470,12 +507,22 @@ int main(int argc, char **argv)
     }
     else {
       struct http_connection *c;
+      struct epoll_event event;
       c = kqueue_create_item(&kqueue);
       c->burst_length = MAX_BURST;
       c->ref_count = 0;
       c->socketfd = socketfd;
       c->buf_length = 0;
       pthread_mutex_init(&c->writelock, NULL);
+      c->epollrfd = epoll_create1(0);
+      c->epollwfd = epoll_create1(0);
+      make_socket_non_blocking(c->socketfd);
+      event.data.fd = c->socketfd;
+      event.events = EPOLLIN;
+      epoll_ctl(c->epollrfd, EPOLL_CTL_ADD, c->socketfd, &event);
+      event.data.fd = c->socketfd;
+      event.events = EPOLLOUT;
+      epoll_ctl(c->epollwfd, EPOLL_CTL_ADD, c->socketfd, &event);
       enqueue_connection_tail(&kqueue, c);
     }
   }
