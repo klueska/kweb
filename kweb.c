@@ -48,7 +48,7 @@ static int find_crlf(char *buf, int max_len)
   return loc;
 }
 
-static int find_request(char *src, int max_len)
+static int get_request_length(char *src, int max_len)
 {
   int i = 0;
   char *curr_line = NULL;
@@ -85,7 +85,7 @@ static int extract_request(struct http_connection *c,
   int ret = 0;
   while(1) {
     /* Find a request in the connection buf */
-    int len = find_request(c->buf, c->buf_length);
+    int len = get_request_length(c->buf, c->buf_length);
     
     /* If we found one, update some variables and return to process it */
     if(len > 0) {
