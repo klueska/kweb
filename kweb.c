@@ -359,13 +359,12 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Prepopulate the request buf with the beginning of the requested file */
   ret = read(file_fd, r.buf, sizeof(r.buf));
 
-  /* Start sending a response */
-  logger(LOG, "SEND", &request_line[5], c->conn.id);
-
-  /* Send the necessary header info + a blank line */
+  /* Prepare the header info + a blank line */
   sprintf(r.rsp_header, page_data[OK_HEADER], VERSION, len, fstr);
   logger(LOG, "Header", r.rsp_header, c->conn.id);
-
+  
+  /* Start sending a response */
+  logger(LOG, "SEND", &request_line[5], c->conn.id);
   pthread_mutex_lock(&c->writelock);
   timed_write(c, r.rsp_header, strlen(r.rsp_header));
   /* Send the file itself in 8KB chunks - last block may be smaller */
