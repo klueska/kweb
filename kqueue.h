@@ -6,7 +6,7 @@
 #include "spinlock.h"
 
 struct kitem {
-  SIMPLEQ_ENTRY(kitem) link;
+  STAILQ_ENTRY(kitem) link;
   unsigned long id;
   uint64_t enqueue_time;
   uint64_t dequeue_time;
@@ -20,7 +20,7 @@ struct kqueue_stats {
   double wait_time_sum;
 };
 
-SIMPLEQ_HEAD(__kqueue, kitem);
+STAILQ_HEAD(__kqueue, kitem);
 struct kqueue {
   int item_size;
   unsigned long ids;

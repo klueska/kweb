@@ -7,7 +7,7 @@ void kqueue_init(struct kqueue *q, int item_size)
   q->item_size = item_size;
   q->ids = 0;
 
-  SIMPLEQ_INIT(&q->queue);
+  STAILQ_INIT(&q->queue);
   spinlock_init(&q->lock);
   q->qstats.size = 0;
   q->qstats.size_sum = 0;
@@ -15,7 +15,7 @@ void kqueue_init(struct kqueue *q, int item_size)
   q->qstats.total_dequeued = 0;
   q->qstats.wait_time_sum = 0;
 
-  SIMPLEQ_INIT(&q->zombie_queue);
+  STAILQ_INIT(&q->zombie_queue);
   spinlock_init(&q->zombie_lock);
   q->zombie_qstats.size = 0;
   q->zombie_qstats.size_sum = 0;
@@ -27,9 +27,9 @@ void kqueue_init(struct kqueue *q, int item_size)
 void *kqueue_create_item(struct kqueue *q)
 {
   spinlock_lock(&q->zombie_lock);
-  struct kitem *r = SIMPLEQ_FIRST(&q->zombie_queue);
+  struct kitem *r = STAILQ_FIRST(&q->zombie_queue);
   if(r) {
-    SIMPLEQ_REMOVE_HEAD(&q->zombie_queue, link);
+    STAILQ_REMOVE_HEAD(&q->zombie_queue, link);
     r->dequeue_time = read_tsc();
     q->zombie_qstats.total_dequeued++;
     q->zombie_qstats.wait_time_sum += (r->dequeue_time - r->enqueue_time);
@@ -52,7 +52,7 @@ void kqueue_destroy_item(struct kqueue *q, struct kitem *r)
   q->zombie_qstats.size_sum += q->zombie_qstats.size++;
   q->zombie_qstats.total_enqueued++;
   r->enqueue_time = read_tsc();
-  SIMPLEQ_INSERT_HEAD(&q->zombie_queue, r, link);
+  STAILQ_INSERT_HEAD(&q->zombie_queue, r, link);
   spinlock_unlock(&q->zombie_lock);
 }
 
@@ -62,7 +62,7 @@ void kqueue_enqueue_item_head(struct kqueue *q, struct kitem *r)
   q->qstats.size_sum += q->qstats.size++;
   q->qstats.total_enqueued++;
   r->enqueue_time = read_tsc();
-  SIMPLEQ_INSERT_HEAD(&q->queue, r, link);
+  STAILQ_INSERT_HEAD(&q->queue, r, link);
   spinlock_unlock(&q->lock);
 }
 
@@ -72,16 +72,16 @@ void kqueue_enqueue_item_tail(struct kqueue *q, struct kitem *r)
   q->qstats.size_sum += q->qstats.size++;
   q->qstats.total_enqueued++;
   r->enqueue_time = read_tsc();
-  SIMPLEQ_INSERT_TAIL(&q->queue, r, link);
+  STAILQ_INSERT_TAIL(&q->queue, r, link);
   spinlock_unlock(&q->lock);
 }
 
 struct kitem *kqueue_dequeue_item(struct kqueue *q)
 {
   spinlock_lock(&q->lock);
-  struct kitem *r = SIMPLEQ_FIRST(&q->queue);
+  struct kitem *r = STAILQ_FIRST(&q->queue);
   if(r) {
-    SIMPLEQ_REMOVE_HEAD(&q->queue, link);
+    STAILQ_REMOVE_HEAD(&q->queue, link);
     r->dequeue_time = read_tsc();
     q->qstats.total_dequeued++;
     q->qstats.wait_time_sum += (r->dequeue_time - r->enqueue_time);
