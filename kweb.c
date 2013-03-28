@@ -19,28 +19,18 @@
 #include "tpool.h"
 #include "kqueue.h"
 #include "cpu_util.h"
-#include "ktimer.h"
+#include "kstats.h"
 #include "tsc.h"
 
 static int listenfd;
-static struct ktimer ktimer;
 static struct kqueue kqueue;
 static struct tpool tpool;
 static struct cpu_util cpu_util;
-
-static struct kqueue_stats rqstats_prev = {0};
-static struct kqueue_stats rqstats_curr = {0};
-static struct tpool_stats tpstats_prev = {0};
-static struct tpool_stats tpstats_curr = {0};
-static struct cpu_util_stats custats_prev = {0};
-static struct cpu_util_stats custats_curr = {0};
+static struct kstats kstats;
 static struct server_stats server_stats = {0};
 
 static void sig_int(int signo);
 static void sig_pipe(int signo);
-static void ktimer_callback(void *arg);
-static void print_interval_statistics();
-static void print_lifetime_statistics();
 
 static int find_crlf(char *buf, int max_len)
 {
@@ -125,7 +115,7 @@ static int intercept_url(char *url)
 {
   if(!strncmp(url, "/start_measurements", 19)) {
     struct query_params {
-      int period_ms;
+      unsigned int period_ms;
       int file_size;
       int tpool_size;
     } query_params = {
@@ -154,14 +144,14 @@ static int intercept_url(char *url)
     tpool_resize(&tpool, query_params.tpool_size);
 
     printf("Starting Measurements\n");
-    printf("Interval Length: %ld\n", ktimer.period_ms);
-    printf("Thread Pool Size: %d\n", tpool.size);
+    printf("Interval Length: %u\n", query_params.period_ms);
+    printf("Thread Pool Size: %d\n", query_params.tpool_size);
     printf("File Size: %d\n", query_params.file_size);
-    ktimer_start(&ktimer, query_params.period_ms);
+    kstats_start(&kstats, query_params.period_ms);
     return 1;
   }
   if(!strcmp(url, "/stop_measurements")) {
-    ktimer_stop(&ktimer);
+    kstats_stop(&kstats);
     printf("Stopped Measurements\n");
     return 1;
   }
@@ -447,7 +437,7 @@ int main(int argc, char **argv)
   kqueue_init(&kqueue, sizeof(struct http_connection));
   tpool_init(&tpool, tpool_size, &kqueue, http_server);
   cpu_util_init(&cpu_util);
-  ktimer_init(&ktimer, ktimer_callback, NULL);
+  kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
 
   /* Get the TSC frequency for our timestamp measurements */
   server_stats.tsc_freq = get_tsc_freq();
@@ -478,10 +468,10 @@ int main(int argc, char **argv)
 static void sig_int(int signo)
 {
   if(signo == SIGINT) {
-    ktimer_stop(&ktimer);
+    kstats_stop(&kstats);
     cpu_util_fini(&cpu_util);
     close(listenfd);
-    print_lifetime_statistics();
+    kstats_print_lifetime_statistics(&kstats);
     printf("Server Terminated\n");
     exit(0);
   }
@@ -492,56 +482,5 @@ static void sig_pipe(int signo)
   if(signo == SIGPIPE) {
     logger(LOG, "SIGPIPE caught.", "", 0);
   }
-}
-
-static void ktimer_callback(void *arg)
-{
-  rqstats_prev = rqstats_curr;
-  tpstats_prev = tpstats_curr;
-  custats_prev = custats_curr;
-
-  rqstats_curr = kqueue_get_stats(&kqueue);
-  tpstats_curr = tpool_get_stats(&tpool);
-  custats_curr = cpu_util_get_stats(&cpu_util);
-
-  print_interval_statistics();
-}
-
-static void print_statistics(char *prefix,
-                             struct kqueue_stats *rqprev,
-                             struct kqueue_stats *rqcurr,
-                             struct tpool_stats *tpprev,
-                             struct tpool_stats *tpcurr,
-                             struct cpu_util_stats *cuprev,
-                             struct cpu_util_stats *cucurr)
-{
-  printf("%sTimestamp: %llu\n", prefix, read_tsc());
-  kqueue_print_total_enqueued(prefix, rqprev, rqcurr);
-  tpool_print_items_processed(prefix, tpprev, tpcurr);
-  tpool_print_average_active_threads(prefix, tpprev, tpcurr);
-  kqueue_print_average_size(prefix, rqprev, rqcurr);
-  kqueue_print_average_wait_time(prefix, rqprev, rqcurr);
-  tpool_print_average_processing_time(prefix, tpprev, tpcurr);
-  cpu_util_print_average(prefix, cuprev, cucurr);
-}
-
-static void print_interval_statistics()
-{
-  printf("\n");
-  printf("Interval Statistics:\n");
-  print_statistics("  ",
-                   &rqstats_prev, &rqstats_curr,
-                   &tpstats_prev, &tpstats_curr,
-                   &custats_prev, &custats_curr);
-}
-
-static void print_lifetime_statistics()
-{
-  printf("\n");
-  printf("Lifetime Statistics:\n");
-  print_statistics("  ",
-                   &((struct kqueue_stats){0}), &rqstats_curr,
-                   &((struct tpool_stats){0}), &tpstats_curr,
-                   &((struct cpu_util_stats){0}), &custats_curr);
 }
 
