@@ -162,11 +162,19 @@ static int intercept_url(char *url)
   return 0;
 }
 
-static void enqueue_connection(struct kqueue *q,
-                               struct http_connection *c)
+static void enqueue_connection_tail(struct kqueue *q,
+                                    struct http_connection *c)
 {
   __sync_fetch_and_add(&c->ref_count, 1);
-  kqueue_enqueue_item(q, &c->conn);
+  kqueue_enqueue_item_tail(q, &c->conn);
+  tpool_wake(&tpool, 1);
+}
+
+static void enqueue_connection_head(struct kqueue *q,
+                                    struct http_connection *c)
+{
+  __sync_fetch_and_add(&c->ref_count, 1);
+  kqueue_enqueue_item_head(q, &c->conn);
   tpool_wake(&tpool, 1);
 }
 
@@ -219,8 +227,15 @@ void http_server(struct kqueue *q, struct kitem *__c)
   }
 
   /* Otherwise, just reenqueue the connection so another thread can grab the
-   * next request and start processing it if there is one. */ 
-  enqueue_connection(q, c);
+   * next request and start processing it. */
+  if(c->burst_length) {
+    c->burst_length--;
+    enqueue_connection_head(q, c);
+  }
+  else {
+    c->burst_length = MAX_BURST;
+    enqueue_connection_tail(q, c);
+  }
 
   /* Now parse through the extracted request, grabbing only what we care about */
   request_line = strtok_r(r.buf, "\r\n", &saveptr);
@@ -456,11 +471,12 @@ int main(int argc, char **argv)
     else {
       struct http_connection *c;
       c = kqueue_create_item(&kqueue);
-      pthread_mutex_init(&c->writelock, NULL);
+      c->burst_length = MAX_BURST;
       c->ref_count = 0;
       c->socketfd = socketfd;
       c->buf_length = 0;
-      enqueue_connection(&kqueue, c);
+      pthread_mutex_init(&c->writelock, NULL);
+      enqueue_connection_tail(&kqueue, c);
     }
   }
 }

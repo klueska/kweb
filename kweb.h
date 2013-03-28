@@ -13,6 +13,8 @@
 #define FORBIDDEN  403
 #define NOTFOUND   404
 
+#define MAX_BURST   10
+
 enum {
   REQ_NEW,
   REQ_ALIVE
@@ -30,11 +32,12 @@ struct http_request {
 
 struct http_connection {
   struct kitem conn;
-  pthread_mutex_t writelock;
+  unsigned int burst_length;
   int ref_count;
   int socketfd;
   int buf_length;
   char buf[BUFSIZE+1];
+  pthread_mutex_t writelock;
 };
 
 struct {

@@ -56,7 +56,17 @@ void kqueue_destroy_item(struct kqueue *q, struct kitem *r)
   spinlock_unlock(&q->zombie_lock);
 }
 
-void kqueue_enqueue_item(struct kqueue *q, struct kitem *r)
+void kqueue_enqueue_item_head(struct kqueue *q, struct kitem *r)
+{
+  spinlock_lock(&q->lock);
+  q->qstats.size_sum += q->qstats.size++;
+  q->qstats.total_enqueued++;
+  r->enqueue_time = read_tsc();
+  SIMPLEQ_INSERT_HEAD(&q->queue, r, link);
+  spinlock_unlock(&q->lock);
+}
+
+void kqueue_enqueue_item_tail(struct kqueue *q, struct kitem *r)
 {
   spinlock_lock(&q->lock);
   q->qstats.size_sum += q->qstats.size++;

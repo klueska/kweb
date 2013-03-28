@@ -37,7 +37,8 @@ struct kqueue {
 void kqueue_init(struct kqueue *q, int item_size);
 void *kqueue_create_item(struct kqueue *q);
 void kqueue_destroy_item(struct kqueue *q, struct kitem *r);
-void kqueue_enqueue_item(struct kqueue *q, struct kitem *r);
+void kqueue_enqueue_item_head(struct kqueue *q, struct kitem *r);
+void kqueue_enqueue_item_tail(struct kqueue *q, struct kitem *r);
 struct kitem *kqueue_dequeue_item(struct kqueue *q);
 
 struct kqueue_stats kqueue_get_stats(struct kqueue *q);
