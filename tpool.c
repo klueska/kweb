@@ -16,27 +16,23 @@ static void *__thread_wrapper(void *arg)
   while(1) {
     spinlock_lock(&t->lock);
     struct kitem *i = NULL;
-    if(t->stats.active_threads < t->nprocs) {
-      t->stats.active_threads_sum += t->stats.active_threads;
-      t->stats.active_threads_samples++;
+    if(t->stats.active_threads < t->nprocs)
       i = kqueue_dequeue_item(t->q);
-      if(i)
-        __sync_fetch_and_add(&t->stats.active_threads, 1);
-    }
-    if(i == NULL) {
+    if(i)
+      __sync_fetch_and_add(&t->stats.active_threads, 1);
+    else
       total_enqueued = t->q->qstats.total_enqueued;
-    }
     spinlock_unlock(&t->lock);
 
     if(i) {
+      __sync_fetch_and_add(&t->stats.active_threads_sum, t->stats.active_threads);
+      __sync_fetch_and_add(&t->stats.active_threads_samples, 1);
       uint64_t beg = read_tsc();
       t->func(t->q, i);
       uint64_t end = read_tsc();
       __sync_fetch_and_add(&t->stats.active_threads, -1);
-      spinlock_lock(&t->lock);
-      t->stats.processing_time_sum += (end - beg);
-      t->stats.items_processed++;
-      spinlock_unlock(&t->lock);
+      __sync_fetch_and_add(&t->stats.processing_time_sum, (end - beg));
+      __sync_fetch_and_add(&t->stats.items_processed, 1);
     }
     else {
       futex_wait(&t->q->qstats.total_enqueued, total_enqueued);
@@ -121,9 +117,7 @@ void tpool_wake(struct tpool *t, int count)
 
 struct tpool_stats tpool_get_stats(struct tpool *t)
 {
-  spinlock_lock(&t->lock);
   struct tpool_stats s = t->stats;
-  spinlock_unlock(&t->lock);
   return s;
 }
 
@@ -131,10 +125,8 @@ void tpool_inform_blocking(struct tpool *t)
 {
   __sync_fetch_and_add(&t->stats.active_threads, -1);
   __sync_fetch_and_add(&t->stats.blocked_threads, 1);
-  spinlock_lock(&t->lock);
-  t->stats.blocked_threads_sum += t->stats.blocked_threads;
-  t->stats.blocked_threads_samples++;
-  spinlock_unlock(&t->lock);
+  __sync_fetch_and_add(&t->stats.blocked_threads_sum, t->stats.blocked_threads);
+  __sync_fetch_and_add(&t->stats.blocked_threads_samples, 1);
   tpool_wake(t, 1);
 }
 
@@ -155,23 +147,23 @@ double tpool_get_average_active_threads(struct tpool_stats *prev,
 {
   int active_threads_samples = curr->active_threads_samples - prev->active_threads_samples;
   double active_threads_sum = curr->active_threads_sum - prev->active_threads_sum;
-  return active_threads_samples ? active_threads_sum/active_threads_samples : 0;
+  return active_threads_samples ? (double)active_threads_sum/active_threads_samples : 0;
 }
 
 double tpool_get_average_blocked_threads(struct tpool_stats *prev,
                                          struct tpool_stats *curr)
 {
   int blocked_threads_samples = curr->blocked_threads_samples - prev->blocked_threads_samples;
-  double blocked_threads_sum = curr->blocked_threads_sum - prev->blocked_threads_sum;
-  return blocked_threads_samples ? blocked_threads_sum/blocked_threads_samples : 0;
+  uint64_t blocked_threads_sum = curr->blocked_threads_sum - prev->blocked_threads_sum;
+  return blocked_threads_samples ? (double)blocked_threads_sum/blocked_threads_samples : 0;
 }
 
 double tpool_get_average_processing_time(struct tpool_stats *prev,
                                          struct tpool_stats *curr)
 {
   int items_processed = tpool_get_items_processed(prev, curr);
-  double processing_time_sum = curr->processing_time_sum - prev->processing_time_sum;
-  return items_processed ? processing_time_sum/items_processed : 0;
+  uint64_t processing_time_sum = curr->processing_time_sum - prev->processing_time_sum;
+  return items_processed ? (double)processing_time_sum/items_processed : 0;
 }
 
 void tpool_print_items_processed(char *prefix,
