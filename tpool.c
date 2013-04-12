@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <linux/futex.h>
+#include <sys/sysinfo.h>
 #include <pthread.h>
 #include <limits.h>
 #include "futex.h"
@@ -12,17 +13,17 @@ static void *__thread_wrapper(void *arg)
   int total_enqueued = 0;
   struct tpool *t = (struct tpool*)arg;
 
-  spinlock_lock(&t->lock);
-  t->stats.active_threads++;
-  spinlock_unlock(&t->lock);
-
   while(1) {
     spinlock_lock(&t->lock);
-    t->stats.active_threads_sum += t->stats.active_threads;
-    t->stats.active_threads_samples++;
-    struct kitem *i = kqueue_dequeue_item(t->q);
+    struct kitem *i = NULL;
+    if(t->stats.active_threads < t->nprocs) {
+      t->stats.active_threads_sum += t->stats.active_threads;
+      t->stats.active_threads_samples++;
+      i = kqueue_dequeue_item(t->q);
+      if(i)
+        __sync_fetch_and_add(&t->stats.active_threads, 1);
+    }
     if(i == NULL) {
-      t->stats.active_threads--;
       total_enqueued = t->q->qstats.total_enqueued;
     }
     spinlock_unlock(&t->lock);
@@ -31,6 +32,7 @@ static void *__thread_wrapper(void *arg)
       uint64_t beg = read_tsc();
       t->func(t->q, i);
       uint64_t end = read_tsc();
+      __sync_fetch_and_add(&t->stats.active_threads, -1);
       spinlock_lock(&t->lock);
       t->stats.processing_time_sum += (end - beg);
       t->stats.items_processed++;
@@ -38,15 +40,9 @@ static void *__thread_wrapper(void *arg)
     }
     else {
       futex_wait(&t->q->qstats.total_enqueued, total_enqueued);
-      spinlock_lock(&t->lock);
-      t->stats.active_threads++;
-      spinlock_unlock(&t->lock);
     }
     if(t->size > t->new_size) {
       __sync_fetch_and_add(&t->size, -1);
-      spinlock_lock(&t->lock);
-      t->stats.active_threads--;
-      spinlock_unlock(&t->lock);
       return NULL;
     }
   }
@@ -76,10 +72,14 @@ int tpool_init(struct tpool *t, int size, struct kqueue *q,
   t->new_size = 0;
   t->q = q;
   t->func = func;
+  t->nprocs = get_nprocs();
   spinlock_init(&t->lock);
   t->stats.active_threads = 0;
+  t->stats.blocked_threads = 0;
   t->stats.active_threads_sum = 0;
+  t->stats.blocked_threads_sum = 0;
   t->stats.active_threads_samples = 0;
+  t->stats.blocked_threads_samples = 0;
   t->stats.items_processed = 0;
   t->stats.processing_time_sum = 0;
   t->size = create_threads(t, size);
@@ -115,7 +115,8 @@ void tpool_resize(struct tpool *t, int size)
 
 void tpool_wake(struct tpool *t, int count)
 {
-  futex_wake(&t->q->qstats.total_enqueued, count);
+  if(t->stats.active_threads < t->nprocs)
+    futex_wake(&t->q->qstats.total_enqueued, count);
 }
 
 struct tpool_stats tpool_get_stats(struct tpool *t)
@@ -124,6 +125,23 @@ struct tpool_stats tpool_get_stats(struct tpool *t)
   struct tpool_stats s = t->stats;
   spinlock_unlock(&t->lock);
   return s;
+}
+
+void tpool_inform_blocking(struct tpool *t)
+{
+  __sync_fetch_and_add(&t->stats.active_threads, -1);
+  __sync_fetch_and_add(&t->stats.blocked_threads, 1);
+  spinlock_lock(&t->lock);
+  t->stats.blocked_threads_sum += t->stats.blocked_threads;
+  t->stats.blocked_threads_samples++;
+  spinlock_unlock(&t->lock);
+  tpool_wake(t, 1);
+}
+
+void tpool_inform_unblocked(struct tpool *t)
+{
+  __sync_fetch_and_add(&t->stats.blocked_threads, -1);
+  __sync_fetch_and_add(&t->stats.active_threads, 1);
 }
 
 int tpool_get_items_processed(struct tpool_stats *prev,
@@ -138,6 +156,14 @@ double tpool_get_average_active_threads(struct tpool_stats *prev,
   int active_threads_samples = curr->active_threads_samples - prev->active_threads_samples;
   double active_threads_sum = curr->active_threads_sum - prev->active_threads_sum;
   return active_threads_samples ? active_threads_sum/active_threads_samples : 0;
+}
+
+double tpool_get_average_blocked_threads(struct tpool_stats *prev,
+                                         struct tpool_stats *curr)
+{
+  int blocked_threads_samples = curr->blocked_threads_samples - prev->blocked_threads_samples;
+  double blocked_threads_sum = curr->blocked_threads_sum - prev->blocked_threads_sum;
+  return blocked_threads_samples ? blocked_threads_sum/blocked_threads_samples : 0;
 }
 
 double tpool_get_average_processing_time(struct tpool_stats *prev,
@@ -162,6 +188,14 @@ void tpool_print_average_active_threads(char *prefix,
 {
   double average = tpool_get_average_active_threads(prev, curr);
   printf("%sAverage active threads: %lf\n", prefix, average);
+}
+
+void tpool_print_average_blocked_threads(char *prefix,
+                                        struct tpool_stats *prev,
+                                        struct tpool_stats *curr)
+{
+  double average = tpool_get_average_blocked_threads(prev, curr);
+  printf("%sAverage blocked threads: %lf\n", prefix, average);
 }
 
 void tpool_print_average_processing_time(char *prefix,

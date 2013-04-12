@@ -58,6 +58,7 @@ static void print_statistics(char *prefix,
   kqueue_print_total_enqueued(prefix, rqprev, rqcurr);
   tpool_print_items_processed(prefix, tpprev, tpcurr);
   tpool_print_average_active_threads(prefix, tpprev, tpcurr);
+  tpool_print_average_blocked_threads(prefix, tpprev, tpcurr);
   kqueue_print_average_size(prefix, rqprev, rqcurr);
   kqueue_print_average_wait_time(prefix, rqprev, rqcurr);
   tpool_print_average_processing_time(prefix, tpprev, tpcurr);

@@ -105,7 +105,9 @@ static ssize_t timed_read(struct http_connection *c,
                           void *buf, size_t count)
 {
   struct epoll_event event;
+  tpool_inform_blocking(&tpool);
   epoll_wait(c->epollrfd, &event, 1, KWEB_SREAD_TIMEOUT);
+  tpool_inform_unblocked(&tpool);
   return read(c->socketfd, buf, count);
 }
 
@@ -116,7 +118,9 @@ static ssize_t timed_write(struct http_connection *c,
   int remaining = count;
   struct epoll_event event;
   while(remaining > 0) {
+    tpool_inform_blocking(&tpool);
     epoll_wait(c->epollwfd, &event, 1, KWEB_SWRITE_TIMEOUT);
+    tpool_inform_unblocked(&tpool);
     ret = write(c->socketfd, buf, remaining);
     if(ret < 0)
       return ret;
@@ -128,10 +132,10 @@ static ssize_t timed_write(struct http_connection *c,
 static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
 {
-  struct epoll_event event;
-  epoll_wait(c->epollwfd, &event, 1, KWEB_SWRITE_TIMEOUT);
+  tpool_inform_blocking(&tpool);
   pthread_mutex_lock(&c->writelock);
-  ssize_t ret = write(c->socketfd, buf, count);
+  tpool_inform_unblocked(&tpool);
+  ssize_t ret = timed_write(c, buf, count);
   pthread_mutex_unlock(&c->writelock);
   return ret;
 }
@@ -374,7 +378,9 @@ void http_server(struct kqueue *q, struct kitem *__c)
   
   /* Start sending a response */
   logger(LOG, "SEND", &request_line[5], c->conn.id);
+  tpool_inform_blocking(&tpool);
   pthread_mutex_lock(&c->writelock);
+  tpool_inform_unblocked(&tpool);
   timed_write(c, r.rsp_header, strlen(r.rsp_header));
   /* Send the file itself in 8KB chunks - last block may be smaller */
   do {
