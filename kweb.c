@@ -18,8 +18,9 @@
 void sig_exit(int signo);
 void print_statistics();
 
-int listenfd;
-struct request_queue global_request_queue;
+static int listenfd;
+static struct request_queue global_request_queue;
+static int tpool_size = INT_MAX;
 
 static long buffer_next_or_finish(struct http_request *r)
 {
@@ -171,7 +172,6 @@ void http_server(struct request_queue *q, struct request *__r)
 
 int main(int argc, char **argv)
 {
-  int tpool_size = INT_MAX;
   int port, pid, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
@@ -274,7 +274,7 @@ int main(int argc, char **argv)
 
   struct request_queue *q = &global_request_queue;
   request_queue_init(q, http_server, sizeof(struct http_request));
-  tpool_init(q, tpool_size);
+  tpool_size = tpool_init(q, tpool_size);
   length = sizeof(cli_addr);
   for(;;) {
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
@@ -285,7 +285,10 @@ int main(int argc, char **argv)
       r = create_request(q);
       r->state = REQ_NEW;
       r->socketfd = socketfd;
-      enqueue_request(q, &r->req);
+      if(tpool_size == 0)
+        http_server(q, &r->req);
+      else
+        enqueue_request(q, &r->req);
     }
   }
 }
@@ -301,11 +304,13 @@ void sig_exit(int signo)
 
 void print_statistics()
 {
+  printf("\n");
   struct request_queue *q = &global_request_queue;
   double average = 0;
+  printf("Thread Pool Size: %d\n", tpool_size);
   average = q->total_enqueued ? 
               q->size_sum/q->total_enqueued : 0;
-  printf("\nAverage request queue length: %lf\n", average);
+  printf("Average request queue length: %lf\n", average);
   average = q->zombie_total_enqueued ? 
               q->zombie_size_sum/q->zombie_total_enqueued : 0;
   printf("Average zombie queue length: %lf\n", average);
