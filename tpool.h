@@ -7,10 +7,10 @@
 #include "spinlock.h"
 
 struct request {
-  SIMPLEQ_ENTRY(request) link;
+  STAILQ_ENTRY(request) link;
   int id;
 };
-SIMPLEQ_HEAD(__request_queue, request);
+STAILQ_HEAD(__request_queue, request);
 struct request_queue {
   int request_size;
   void (*func)(struct request_queue *, struct request *);
