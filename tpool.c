@@ -1,7 +1,6 @@
 #include <malloc.h>
-#include <limits.h>
-#include "futex.h"
 #include "tpool.h"
+#include "os.h"
 
 void request_queue_init(struct request_queue *q, 
                         void (*func)(struct request_queue *, struct request *),
@@ -99,7 +98,7 @@ int tpool_init(struct request_queue *q, int num)
   pthread_t thread;
   pthread_attr_t attr;
   pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN);
+  pthread_attr_setstacksize(&attr, TPOOL_STACK_SZ);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   for(int i=0; i<num; i++) {
     if(pthread_create(&thread, &attr, __thread_wrapper, q) == 0)

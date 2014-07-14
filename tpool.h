@@ -2,9 +2,8 @@
 #define TPOOL_H
 
 #include <sys/queue.h>
-#include <linux/futex.h>
 #include <pthread.h>
-#include "spinlock.h"
+#include "os.h"
 
 struct request {
   STAILQ_ENTRY(request) link;
