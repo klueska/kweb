@@ -1,9 +1,9 @@
 #ifndef KWEB_H
 #define KWEB_H
 
-#include <sys/epoll.h>
-#include "pthread.h"
+#include <pthread.h>
 #include "kqueue.h"
+#include "os.h"
 
 #define VERSION  "1.0"
 
@@ -41,25 +41,9 @@ struct http_connection {
   int buf_length;
   char buf[BUFSIZE+1];
   pthread_mutex_t writelock;
+  /* TODO: these are linux specific, consider hiding them better */
   int epollrfd;
   int epollwfd;
-};
-
-struct {
-  char *ext;
-  char *filetype;
-} extensions [] = {
-  {"gif", "image/gif" },  
-  {"jpg", "image/jpg" }, 
-  {"jpeg","image/jpeg"},
-  {"png", "image/png" },  
-  {"ico", "image/ico" },  
-  {"zip", "image/zip" },  
-  {"gz",  "image/gz"  },  
-  {"tar", "image/tar" },  
-  {"htm", "text/html" },  
-  {"html","text/html" },  
-  {0,0}
 };
 
 enum {
@@ -67,32 +51,14 @@ enum {
   NOTFOUND_PAGE,
   OK_HEADER,
 };
-char *page_data[] = {
-  "HTTP/1.1 403 Forbidden\r\n"
-  "Content-Length: 185\r\n"
-  "Content-Type: text/html\r\n\r\n"
-  "<html><head>\n"
-  "<title>403 Forbidden</title>\n"
-  "</head><body>\n"
-  "<h1>Forbidden</h1>\n"
-  "The requested URL, file type or operation is not allowed on this simple static file webserver.\n"
-  "</body></html>\n",
 
-  "HTTP/1.1 404 Not Found\r\n"
-  "Content-Length: 138\r\n"
-  "Content-Type: text/html\r\n\r\n"
-  "<html><head>\n"
-  "<title>404 Not Found</title>\n"
-  "</head><body>\n"
-  "<h1>Not Found</h1>\n"
-  "The requested URL was not found on this server.\n"
-  "</body></html>\n",
+extern struct tpool tpool;
 
-  "HTTP/1.1 200 OK\r\n"
-  "Server: kweb/%s\r\n"
-  "Content-Length: %ld\r\n"
-  "Content-Type: %s\r\n\r\n"
-};
+/* OS dependent, in linux.c or akaros.c */
+void init_connection(struct http_connection *c);
+void destroy_connection(struct http_connection *c);
+ssize_t timed_read(struct http_connection *c, void *buf, size_t count);
+ssize_t timed_write(struct http_connection *c, const void *buf, size_t count);
 
 #ifndef DEBUG
 #define logger(type, s1, s2, socket_fd) ({type;})

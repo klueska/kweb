@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <sys/queue.h>
-#include "spinlock.h"
+#include "os.h"
 
 struct kitem {
   STAILQ_ENTRY(kitem) link;

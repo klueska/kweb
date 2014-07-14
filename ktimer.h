@@ -1,7 +1,7 @@
 #ifndef KTIMER_H
 #define KTIMER_H
 
-#include "spinlock.h"
+#include "os.h"
 
 struct ktimer {
   int state;

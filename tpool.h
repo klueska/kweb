@@ -2,7 +2,6 @@
 #define TPOOL_H
 
 #include <stdint.h>
-#include "spinlock.h"
 #include "kqueue.h"
 
 struct tpool_stats {

@@ -9,7 +9,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
-#include <sys/epoll.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -22,10 +21,55 @@
 #include "cpu_util.h"
 #include "kstats.h"
 #include "tsc.h"
+#include "os.h"
 
+struct {
+  char *ext;
+  char *filetype;
+} extensions [] = {
+  {"gif", "image/gif" },
+  {"jpg", "image/jpg" },
+  {"jpeg","image/jpeg"},
+  {"png", "image/png" },
+  {"ico", "image/ico" },
+  {"zip", "image/zip" },
+  {"gz",  "image/gz"  },
+  {"tar", "image/tar" },
+  {"htm", "text/html" },
+  {"html","text/html" },
+  {0,0}
+};
+
+char *page_data[] = {
+  "HTTP/1.1 403 Forbidden\r\n"
+  "Content-Length: 185\r\n"
+  "Content-Type: text/html\r\n\r\n"
+  "<html><head>\n"
+  "<title>403 Forbidden</title>\n"
+  "</head><body>\n"
+  "<h1>Forbidden</h1>\n"
+  "The requested URL, file type or operation is not allowed on this simple static file webserver.\n"
+  "</body></html>\n",
+
+  "HTTP/1.1 404 Not Found\r\n"
+  "Content-Length: 138\r\n"
+  "Content-Type: text/html\r\n\r\n"
+  "<html><head>\n"
+  "<title>404 Not Found</title>\n"
+  "</head><body>\n"
+  "<h1>Not Found</h1>\n"
+  "The requested URL was not found on this server.\n"
+  "</body></html>\n",
+
+  "HTTP/1.1 200 OK\r\n"
+  "Server: kweb/%s\r\n"
+  "Content-Length: %ld\r\n"
+  "Content-Type: %s\r\n\r\n"
+};
+
+struct tpool tpool;
 static int listenfd;
 static struct kqueue kqueue;
-static struct tpool tpool;
 static struct cpu_util cpu_util;
 static struct kstats kstats;
 static struct server_stats server_stats = {0};
@@ -82,51 +126,6 @@ static int intercept_url(char *url)
     return 1;
   }
   return 0;
-}
-
-static int make_socket_non_blocking(int sfd)
-{
-  int flags, s;
-  flags = fcntl (sfd, F_GETFL, 0);
-  if(flags == -1) {
-    perror("fcntl");
-    return -1;
-  }
-  flags |= O_NONBLOCK;
-  s = fcntl (sfd, F_SETFL, flags);
-  if(s == -1) {
-    perror("fcntl");
-    return -1;
-  }
-  return 0;
-}
-
-static ssize_t timed_read(struct http_connection *c, 
-                          void *buf, size_t count)
-{
-  struct epoll_event event;
-  tpool_inform_blocking(&tpool);
-  epoll_wait(c->epollrfd, &event, 1, KWEB_SREAD_TIMEOUT);
-  tpool_inform_unblocked(&tpool);
-  return read(c->socketfd, buf, count);
-}
-
-static ssize_t timed_write(struct http_connection *c,
-                           const void *buf, size_t count)
-{
-  int ret = 0;
-  int remaining = count;
-  struct epoll_event event;
-  while(remaining > 0) {
-    tpool_inform_blocking(&tpool);
-    epoll_wait(c->epollwfd, &event, 1, KWEB_SWRITE_TIMEOUT);
-    tpool_inform_unblocked(&tpool);
-    ret = write(c->socketfd, buf, remaining);
-    if(ret < 0)
-      return ret;
-    remaining -= ret;
-  }
-  return count;
 }
 
 static ssize_t serialized_write(struct http_connection *c,
@@ -240,8 +239,7 @@ static void maybe_destroy_connection(struct kqueue *q,
   __sync_fetch_and_add(&c->ref_count, -1);
   if(c->ref_count == 0) {
     close(c->socketfd);
-    close(c->epollrfd);
-    close(c->epollwfd);
+	destroy_connection(c);
     kqueue_destroy_item(q, &c->conn);
   }
 }
@@ -521,22 +519,13 @@ int main(int argc, char **argv)
     }
     else {
       struct http_connection *c;
-      struct epoll_event event;
       c = kqueue_create_item(&kqueue);
       c->burst_length = MAX_BURST;
       c->ref_count = 0;
       c->socketfd = socketfd;
       c->buf_length = 0;
       pthread_mutex_init(&c->writelock, NULL);
-      c->epollrfd = epoll_create1(0);
-      c->epollwfd = epoll_create1(0);
-      make_socket_non_blocking(c->socketfd);
-      event.data.fd = c->socketfd;
-      event.events = EPOLLIN;
-      epoll_ctl(c->epollrfd, EPOLL_CTL_ADD, c->socketfd, &event);
-      event.data.fd = c->socketfd;
-      event.events = EPOLLOUT;
-      epoll_ctl(c->epollwfd, EPOLL_CTL_ADD, c->socketfd, &event);
+	  init_connection(c);
       enqueue_connection_tail(&kqueue, c);
     }
   }

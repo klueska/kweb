@@ -1,12 +1,10 @@
 #define _GNU_SOURCE
 #include <stdio.h>
-#include <linux/futex.h>
 #include <sys/sysinfo.h>
 #include <pthread.h>
-#include <limits.h>
-#include "futex.h"
 #include "tpool.h"
 #include "tsc.h"
+#include "os.h"
 
 static void *__thread_wrapper(void *arg)
 {
@@ -50,7 +48,7 @@ static int create_threads(struct tpool *t, int num)
   pthread_t thread;
   pthread_attr_t attr;
   pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, PTHREAD_STACK_MIN*4);
+  pthread_attr_setstacksize(&attr, TPOOL_STACK_SZ);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   for(int i=0; i<num; i++) {
     if(pthread_create(&thread, &attr, __thread_wrapper, t) == 0)

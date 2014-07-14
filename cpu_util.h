@@ -2,7 +2,7 @@
 #define CPU_UTIL_H
 
 #include <unistd.h>
-#include "spinlock.h"
+#include "os.h"
 
 struct proc_util {
   double user;
