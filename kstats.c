@@ -54,7 +54,7 @@ static void print_statistics(char *prefix,
                              struct cpu_util_stats *cuprev,
                              struct cpu_util_stats *cucurr)
 {
-  printf("%sTimestamp: %llu\n", prefix, read_tsc());
+  printf("%sTimestamp: %lu\n", prefix, read_tsc());
   kqueue_print_total_enqueued(prefix, rqprev, rqcurr);
   tpool_print_items_processed(prefix, tpprev, tpcurr);
   tpool_print_average_active_threads(prefix, tpprev, tpcurr);

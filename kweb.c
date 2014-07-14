@@ -513,7 +513,7 @@ int main(int argc, char **argv)
   logger(LOG, "Starting kweb", argv[1], getpid());
   printf("Server Started\n");
   printf("Thread Pool Size: %d\n", tpool.size);
-  printf("TSC Frequency: %llu\n", server_stats.tsc_freq);
+  printf("TSC Frequency: %lu\n", server_stats.tsc_freq);
   length = sizeof(cli_addr);
   for(;;) {
     if((socketfd = accept(listenfd, (struct sockaddr *)&cli_addr, &length)) < 0) {
