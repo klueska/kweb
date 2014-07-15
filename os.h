@@ -1,6 +1,9 @@
 #ifndef OS_H
 #define OS_H
 
+#define I_AM_HERE printf("Core x is in %s() at %s:%d\n", \
+                         __FUNCTION__, __FILE__, __LINE__);
+
 #ifdef __ros__
 
 #include <spinlock.h>
