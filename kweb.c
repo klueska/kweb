@@ -499,7 +499,7 @@ int main(int argc, char **argv)
 
   /* Initialize necessary data structures */
   kqueue_init(&kqueue, sizeof(struct http_connection));
-  tpool_init(&tpool, tpool_size, &kqueue, http_server);
+  tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
   cpu_util_init(&cpu_util);
   kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
 

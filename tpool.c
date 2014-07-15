@@ -48,7 +48,7 @@ static int create_threads(struct tpool *t, int num)
   pthread_t thread;
   pthread_attr_t attr;
   pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, TPOOL_STACK_SZ);
+  pthread_attr_setstacksize(&attr, t->stacksize);
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
   for(int i=0; i<num; i++) {
     if(pthread_create(&thread, &attr, __thread_wrapper, t) == 0)
@@ -60,7 +60,7 @@ static int create_threads(struct tpool *t, int num)
 }
 
 int tpool_init(struct tpool *t, int size, struct kqueue *q,
-               void (*func)(struct kqueue *, struct kitem *))
+               void (*func)(struct kqueue *, struct kitem *), size_t stacksize)
 {
   t->size = 0;
   t->new_size = 0;
@@ -76,6 +76,7 @@ int tpool_init(struct tpool *t, int size, struct kqueue *q,
   t->stats.blocked_threads_samples = 0;
   t->stats.items_processed = 0;
   t->stats.processing_time_sum = 0;
+  t->stacksize = stacksize;
   t->size = create_threads(t, size);
   t->new_size = t->size;
   return t->size;

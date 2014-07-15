@@ -16,7 +16,7 @@ static inline long futex_wake(int *addr, int count)
   return futex(addr, FUTEX_WAKE, count, NULL, NULL, 0);
 }
 
-#define TPOOL_STACK_SZ (PGSIZE * 4)
+#define KWEB_STACK_SZ (PGSIZE * 4)
 
 #else /* linux */
 
@@ -37,7 +37,7 @@ static inline long futex_wake(int *addr, int count)
   return syscall(SYS_futex, addr, FUTEX_WAKE, count);
 }
 
-#define TPOOL_STACK_SZ (PTHREAD_STACK_MIN * 4)
+#define KWEB_STACK_SZ (PTHREAD_STACK_MIN * 4)
 
 #endif
 

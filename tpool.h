@@ -23,10 +23,11 @@ struct tpool {
   void (*func)(struct kqueue *, struct kitem *);
   spinlock_t lock;
   struct tpool_stats stats;
+  size_t stacksize;
 };
 
 int tpool_init(struct tpool *t, int size, struct kqueue *q,
-               void (*func)(struct kqueue *, struct kitem *));
+               void (*func)(struct kqueue *, struct kitem *), size_t stacksize);
 void tpool_resize(struct tpool *t, int size);
 void tpool_wake(struct tpool *t, int count);
 void tpool_inform_blocking(struct tpool *t);
