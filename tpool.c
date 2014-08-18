@@ -8,12 +8,13 @@
 
 static void *__thread_wrapper(void *arg)
 {
+  struct kitem *i;
   int total_enqueued = 0;
   struct tpool *t = (struct tpool*)arg;
 
   while(1) {
+    i = NULL;
     spinlock_lock(&t->lock);
-    struct kitem *i = NULL;
     if(t->stats.active_threads < t->nprocs)
       i = kqueue_dequeue_item(t->q);
     if(i)
