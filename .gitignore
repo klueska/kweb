@@ -2,3 +2,4 @@ files/kweb.log
 files/core
 kweb
 *.swp
+*.pyc
