@@ -4,12 +4,14 @@
 #include <stdbool.h>
 #include "tpool.h"
 
-/* The top level function that knows how to intercept a url and run commands */
-bool intercept_url(char *url);
+/* The top level function that knows how to intercept a url and run commands.
+ * It returns a buffer of data that should be written back over the connection.
+ * This buffer must be freed by the caller. */
+char *intercept_url(char *url);
 
 /* Individual commands to run */
-void start_measurements(void *params);
-void stop_measurements(void *params);
-void terminate(void *params);
+char *start_measurements(void *params);
+char *stop_measurements(void *params);
+char *terminate(void *params);
 
 #endif // URLCMD_H 

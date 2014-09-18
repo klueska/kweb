@@ -5,16 +5,18 @@
 #include <signal.h>
 #include "urlcmd.h"
 #include "kstats.h"
+#include "kweb.h"
 
 /* Extern in some global variables for the url commands */
 extern struct tpool tpool;
 extern struct kstats kstats;
 extern void sig_int(int signo);
+extern char *page_data[];
 
 /* Struct representing the url commands */
 struct url_cmd {
 	char name[256];
-	void (*func)(void *arg);
+	char *(*func)(void *arg);
 };
 
 /* Struct representing query parameters */
@@ -48,7 +50,7 @@ struct query_param *parse_query_string(char* query) {
 }
 
 /* The top level function that knows how to intercept a url and run commands */
-bool intercept_url(char *url) {
+char *intercept_url(char *url) {
 	/* Strip off the leading slash if there is one */
 	if (url[0] == '/')
 		url++;
@@ -66,16 +68,23 @@ bool intercept_url(char *url) {
 			if(*c == '?')
 				params = parse_query_string(c+1);
 			/* Now run the command, passing it its parameters */
-			url_cmds[i].func(params);
+			char *cmdbuf = url_cmds[i].func(params);
+			size_t cmdbuflen = cmdbuf ? strlen(cmdbuf) : 6; /* (null) */
+			/* And return a buffer with some output */
+			char *buf = malloc(strlen(page_data[URLCMD_PAGE]) +
+			                   strlen(url_cmds[i].name) + 
+			                   cmdbuflen + 1);
+			sprintf(buf, page_data[URLCMD_PAGE], url_cmds[i].name, cmdbuf);
+			free(cmdbuf);
 			free(params);
-			return true;
+			return buf;
 		}
 	}
 	/* No matches */
-	return false;
+	return NULL;
 }
 
-void start_measurements(void *__params) {
+char *start_measurements(void *__params) {
 	struct {
 		unsigned int period_ms;
 		int file_size;
@@ -97,19 +106,25 @@ void start_measurements(void *__params) {
 	}
 	tpool_resize(&tpool, my_params.tpool_size);
 
-	printf("Starting Measurements\n");
-	printf("Interval Length: %u\n", my_params.period_ms);
-	printf("Thread Pool Size: %d\n", my_params.tpool_size);
-	printf("File Size: %d\n", my_params.file_size);
+	char *buf = malloc(256);
+	char *bp = buf;
+	bp += sprintf(bp, "Starting Measurements<br/>");
+	bp += sprintf(bp, "Interval Length: %u<br/>", my_params.period_ms);
+	bp += sprintf(bp, "Thread Pool Size: %d<br/>", my_params.tpool_size);
+	bp += sprintf(bp, "File Size: %d<br/>", my_params.file_size);
 	kstats_start(&kstats, my_params.period_ms);
+	return buf;
 } 
 
-void stop_measurements(void *params) {
+char *stop_measurements(void *params) {
+	char *buf = malloc(256);
 	kstats_stop(&kstats);
-	printf("Stopped Measurements\n");
+	sprintf(buf, "Stopped Measurements<br/>");
+	return buf;
 }
 
-void terminate(void *params) {
+char *terminate(void *params) {
 	sig_int(SIGINT);
+	return NULL;
 }
 

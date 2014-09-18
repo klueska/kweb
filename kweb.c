@@ -65,7 +65,14 @@ char *page_data[] = {
   "HTTP/1.1 200 OK\r\n"
   "Server: kweb/%s\r\n"
   "Content-Length: %ld\r\n"
-  "Content-Type: %s\r\n\r\n"
+  "Content-Type: %s\r\n\r\n",
+
+  "<html><head>\n"
+  "<title>Kweb URL Command</title>\n"
+  "</head><body>\n"
+  "<h1>Kweb URL Command: %s</h1>\n"
+  "%s\n"
+  "</body></html>\n",
 };
 
 void sig_int(int signo);
@@ -256,11 +263,15 @@ void http_server(struct kqueue *q, struct kitem *__c)
   }
 
   /* Intercept certain urls and do something special. */
-  if(intercept_url(&request_line[4])) {
+  char *intercept_buf = intercept_url(&request_line[4]);
+  if(intercept_buf) {
+	int buflen = strlen(intercept_buf);
     /* Send the necessary header info + a blank line */
     logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
-    sprintf(r.buf, page_data[OK_HEADER], VERSION, 0, "text/plain");
+    sprintf(r.buf, page_data[OK_HEADER], VERSION, buflen, "text/html");
     serialized_write(c, r.buf, strlen(r.buf));
+    serialized_write(c, intercept_buf, buflen);
+	free(intercept_buf);
     maybe_destroy_connection(q, c);
     return;
   }

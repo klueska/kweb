@@ -50,6 +50,7 @@ enum {
   FORBIDDEN_PAGE,
   NOTFOUND_PAGE,
   OK_HEADER,
+  URLCMD_PAGE,
 };
 
 extern struct tpool tpool;
