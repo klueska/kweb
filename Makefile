@@ -1,4 +1,4 @@
-FILES = kweb.c kqueue.c tpool.c cpu_util.c ktimer.c kstats.c
+FILES = kweb.c kqueue.c tpool.c cpu_util.c ktimer.c kstats.c urlcmd.c
 
 all:
 	@echo "Either make linux or make akaros"

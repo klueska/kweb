@@ -22,6 +22,7 @@
 #include "kstats.h"
 #include "tsc.h"
 #include "os.h"
+#include "urlcmd.h"
 
 struct {
   char *ext;
@@ -67,66 +68,15 @@ char *page_data[] = {
   "Content-Type: %s\r\n\r\n"
 };
 
+void sig_int(int signo);
+void sig_pipe(int signo);
+
 struct tpool tpool;
+struct kstats kstats;
 static int listenfd;
 static struct kqueue kqueue;
 static struct cpu_util cpu_util;
-static struct kstats kstats;
 static struct server_stats server_stats = {0};
-
-static void sig_int(int signo);
-static void sig_pipe(int signo);
-
-static int intercept_url(char *url)
-{
-  if(!strncmp(url, "/start_measurements", 19)) {
-    struct query_params {
-      unsigned int period_ms;
-      int file_size;
-      int tpool_size;
-    } query_params = {
-      .period_ms = 1000,
-      .file_size = 0,
-      .tpool_size = tpool.size,
-    };
-    void parse_query_string(char* query, struct query_params *p) {
-      char *saveptr;
-      char *token = strtok_r(query, "&", &saveptr);
-      while(token != NULL) {
-        char *saveptr2;
-        char *name = strtok_r(token, "=", &saveptr2);
-        char *value = strtok_r(NULL, "=", &saveptr2);
-        if(!strcmp(name, "period_ms"))
-          p->period_ms = atoi(value);
-        if(!strcmp(name, "file_size"))
-          p->file_size = atoi(value);
-        if(!strcmp(name, "tpool_size"))
-          p->tpool_size = atoi(value);
-        token = strtok_r(NULL, "&", &saveptr);
-      }
-    }
-    if(url[19] == '?')
-      parse_query_string(&url[20], &query_params);
-    tpool_resize(&tpool, query_params.tpool_size);
-
-    printf("Starting Measurements\n");
-    printf("Interval Length: %u\n", query_params.period_ms);
-    printf("Thread Pool Size: %d\n", query_params.tpool_size);
-    printf("File Size: %d\n", query_params.file_size);
-    kstats_start(&kstats, query_params.period_ms);
-    return 1;
-  }
-  if(!strcmp(url, "/stop_measurements")) {
-    kstats_stop(&kstats);
-    printf("Stopped Measurements\n");
-    return 1;
-  }
-  if(!strcmp(url, "/terminate")) {
-    sig_int(SIGINT);
-    return 1;
-  }
-  return 0;
-}
 
 static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
@@ -531,7 +481,7 @@ int main(int argc, char **argv)
   }
 }
 
-static void sig_int(int signo)
+void sig_int(int signo)
 {
   if(signo == SIGINT) {
     kstats_stop(&kstats);
@@ -543,7 +493,7 @@ static void sig_int(int signo)
   }
 }
 
-static void sig_pipe(int signo)
+void sig_pipe(int signo)
 {
   if(signo == SIGPIPE) {
     logger(LOG, "SIGPIPE caught.", "", 0);
