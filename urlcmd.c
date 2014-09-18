@@ -85,14 +85,14 @@ void start_measurements(void *__params) {
 	if (__params) {
 		struct query_param *p = (struct query_param*)__params;
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (!strcmp(p->key, "period_ms"))
-				my_params.period_ms = atoi(p->value);
-			if (!strcmp(p->key, "file_size"))
-				my_params.file_size = atoi(p->value);
-			if (!strcmp(p->key, "tpool_size"))
-				my_params.tpool_size = atoi(p->value);
-			if (!strcmp(p->key, ""))
+			if (p[i].key == NULL)
 				break;
+			else if (!strcmp(p[i].key, "period_ms"))
+				my_params.period_ms = atoi(p[i].value);
+			else if (!strcmp(p[i].key, "file_size"))
+				my_params.file_size = atoi(p[i].value);
+			else if (!strcmp(p[i].key, "tpool_size"))
+				my_params.tpool_size = atoi(p[i].value);
 		}
 	}
 	tpool_resize(&tpool, my_params.tpool_size);
