@@ -30,6 +30,7 @@ struct query_param {
 static struct url_cmd url_cmds[] = {
 	{"start_measurements", start_measurements},
 	{"stop_measurements", stop_measurements},
+	{"add_vcores", add_vcores},
 	{"terminate", terminate}
 };
 
@@ -120,6 +121,40 @@ char *stop_measurements(void *params) {
 	char *buf = malloc(256);
 	kstats_stop(&kstats);
 	sprintf(buf, "Stopped Measurements<br/>");
+	return buf;
+}
+
+char *add_vcores(void *__params) {
+	struct {
+		int num_vcores;
+	} my_params = {-1};
+
+	if (__params) {
+		struct query_param *p = (struct query_param*)__params;
+		for (int i=0; i < MAX_PARAMS; i++) {
+			if (p[i].key == NULL)
+				break;
+			else if (!strcmp(p[i].key, "num_vcores"))
+				my_params.num_vcores = atoi(p[i].value);
+		}
+	}
+	char *buf = malloc(256);
+	char *bp = buf;
+
+#ifndef __ros__
+	bp += sprintf(bp, "Error: only supported on Akaros");
+
+#else
+	if (my_params.num_vcores < -1) {
+		bp += sprintf(bp, "Error: you must specify a query srtring parameter"
+		                  "of \"num_vcores=\" that is > 0");
+	} else {
+		vcore_request(my_params.num_vcores);
+		bp += sprintf(bp, "Success: you now have requests granted or pending"
+		                  "for %d vcores.",
+		              __procdata.res_req[RES_CORES].amt_wanted);
+	}
+#endif
 	return buf;
 }
 

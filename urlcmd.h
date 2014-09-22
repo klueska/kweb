@@ -12,6 +12,8 @@ char *intercept_url(char *url);
 /* Individual commands to run */
 char *start_measurements(void *params);
 char *stop_measurements(void *params);
+char *add_vcores(void *params);
+
 char *terminate(void *params);
 
 #endif // URLCMD_H 
