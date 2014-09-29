@@ -3,6 +3,7 @@
 # Author: Kevin Klues <klueska@cs.berkeley.edu>
 
 import os
+import shutil
 import matplotlib
 from pylab import *
 import numpy as np
@@ -115,6 +116,8 @@ def generate_graphs(args):
   for f in args.input_files.split():
     data.extend(parse_file(f))
   os.mkdir(args.output_folder)
+  for f in args.input_files.split():
+    shutil.copyfile(f, args.output_folder + '/' + args.output_folder + '.dat')
 
   total_sent_received(data, args.output_folder)
   response_times(data, args.output_folder)
