@@ -5,6 +5,8 @@
 import os
 import shutil
 import matplotlib
+import matplotlib as mpl
+matplotlib.use('Agg')
 from pylab import *
 import numpy as np
 
