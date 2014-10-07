@@ -36,12 +36,13 @@ def parse_file(f):
 
 def get_response_times(data):
   rsp_times = {}
+  start_times = {}
   for d in data:
     if d.event == 'EV_CALL_SEND_START':
-      rsp_times[d.id] = d.time
+      start_times[d.id] = d.time
     if d.event == 'EV_CALL_DESTROYED':
-      if d.id in rsp_times:
-        rsp_times[d.id] = d.time - rsp_times[d.id]
+      if d.id in start_times:
+        rsp_times[d.id] = d.time - start_times[d.id]
   return rsp_times
 
 def total_sent_received(data, folder):
