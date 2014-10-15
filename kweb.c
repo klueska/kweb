@@ -193,8 +193,8 @@ static void enqueue_connection_head(struct kqueue *q,
 static void maybe_destroy_connection(struct kqueue *q,
                                      struct http_connection *c)
 {
-  __sync_fetch_and_add(&c->ref_count, -1);
-  if(c->ref_count == 0) {
+  int count = __sync_add_and_fetch(&c->ref_count, -1);
+  if(count == 0) {
     close(c->socketfd);
 	destroy_connection(c);
     kqueue_destroy_item(q, &c->conn);
