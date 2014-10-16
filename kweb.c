@@ -243,6 +243,11 @@ void http_server(struct kqueue *q, struct kitem *__c)
 
   /* Now parse through the extracted request, grabbing only what we care about */
   request_line = strtok_r(r.buf, "\r\n", &saveptr);
+  if (!request_line) {
+    logger(LOG, "Unterminated request buffer.", "", c->conn.id);
+    maybe_destroy_connection(q, c);
+    return;
+  }
 
   /* Make sure it's a GET operation */
   if(strncmp(request_line, "GET ", 4) && strncmp(request_line, "get ", 4)) {
