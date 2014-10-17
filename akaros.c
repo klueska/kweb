@@ -2,7 +2,9 @@
 #include <unistd.h>
 #include <alarm.h>
 #include "kweb.h"
+/* including for the header values for faking support to the rest of kweb */
 #include "tpool.h"
+#include "kstats.h"
 
 int usleep(useconds_t usec)
 {
@@ -55,4 +57,49 @@ ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
 
 	unset_alarm(&waiter);
 	return ret;
+}
+
+
+/* Faking tpool and kstats */
+
+void tpool_resize(struct tpool *t, int size)
+{
+	printf("Got resize request, skipping\n");
+}
+
+int tpool_init(struct tpool *t, int size, struct kqueue *q,
+               void (*func)(struct kqueue *, struct kitem *), size_t stacksize)
+{
+	return 0;
+}
+
+void tpool_inform_blocking(struct tpool *t)
+{
+}
+
+void tpool_inform_unblocked(struct tpool *t)
+{
+}
+
+void tpool_wake(struct tpool *t, int count)
+{
+}
+
+void kstats_init(struct kstats *kstats, struct kqueue *kqueue,
+                 struct tpool *tpool, struct cpu_util *cpu_util)
+{
+}
+
+int kstats_start(struct kstats *kstats, unsigned int period_ms)
+{
+	return -1;
+}
+
+int kstats_stop(struct kstats *kstats)
+{
+	return -1;
+}
+
+void kstats_print_lifetime_statistics(struct kstats *kstats)
+{
 }
