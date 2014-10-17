@@ -40,7 +40,7 @@ void *kqueue_create_item(struct kqueue *q)
   if(r == NULL) {
     r = malloc(q->item_size);
   }
-  r->id = q->ids++;
+  r->id = __sync_fetch_and_add(&q->ids, 1);
   r->enqueue_time = 0;
   r->dequeue_time = 0;
   return r;
