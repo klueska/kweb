@@ -81,9 +81,10 @@ void sig_pipe(int signo);
 struct tpool tpool;
 struct kqueue kqueue;
 struct kstats kstats;
+struct cpu_util cpu_util;
+struct server_stats server_stats = {0};
+int tpool_size = INT_MAX;
 static int listenfd;
-static struct cpu_util cpu_util;
-static struct server_stats server_stats = {0};
 
 static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
@@ -357,7 +358,6 @@ void http_server(struct kqueue *q, struct kitem *__c)
 
 int main(int argc, char **argv)
 {
-  int tpool_size = INT_MAX;
   int port, pid, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
@@ -462,10 +462,7 @@ int main(int argc, char **argv)
   }
 
   /* Initialize necessary data structures */
-  kqueue_init(&kqueue, sizeof(struct http_connection));
-  tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
-  cpu_util_init(&cpu_util);
-  kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
+  os_init();
 
   /* Get the TSC frequency for our timestamp measurements */
   server_stats.tsc_freq = get_tsc_freq();

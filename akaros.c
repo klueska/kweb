@@ -6,6 +6,20 @@
 #include "tpool.h"
 #include "kstats.h"
 
+
+void os_init(void)
+{
+
+   pthread_can_vcore_request(FALSE);   /* 2LS won't manage vcores */
+   pthread_need_tls(FALSE);
+   pthread_lib_init();                 /* gives us one vcore */
+   vcore_request(1);	/* one worker vcore */ // XXX
+
+
+}
+
+
+/* only called by ktimer, which isn't called */
 int usleep(useconds_t usec)
 {
 	sys_block(usec);
@@ -90,12 +104,6 @@ static void new_conv(int call_fd)
 void tpool_resize(struct tpool *t, int size)
 {
 	printf("Got resize request, skipping\n");
-}
-
-int tpool_init(struct tpool *t, int size, struct kqueue *q,
-               void (*func)(struct kqueue *, struct kitem *), size_t stacksize)
-{
-	return 0;
 }
 
 void tpool_inform_blocking(struct tpool *t)

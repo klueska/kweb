@@ -2,6 +2,23 @@
 #include <stdio.h>
 #include "kweb.h"
 #include "tpool.h"
+#include "kstats.h"
+#include "cpu_util.h"
+
+void os_init(void)
+{
+  extern struct tpool tpool;
+  extern struct kqueue kqueue;
+  extern struct kstats kstats;
+  extern struct cpu_util cpu_util;
+  extern struct server_stats server_stats;
+  extern int tpool_size;
+
+  kqueue_init(&kqueue, sizeof(struct http_connection));
+  tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
+  cpu_util_init(&cpu_util);
+  kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
+}
 
 static int make_socket_non_blocking(int sfd)
 {

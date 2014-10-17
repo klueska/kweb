@@ -58,7 +58,10 @@ extern struct tpool tpool;
 void enqueue_connection_tail(struct kqueue *q, struct http_connection *c);
 void enqueue_connection_head(struct kqueue *q, struct http_connection *c);
 
+void http_server(struct kqueue *q, struct kitem *__c);
+
 /* OS dependent, in linux.c or akaros.c */
+void os_init(void);
 void init_connection(struct http_connection *c);
 void destroy_connection(struct http_connection *c);
 ssize_t timed_read(struct http_connection *c, void *buf, size_t count);
