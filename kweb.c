@@ -334,6 +334,12 @@ void http_server(struct kqueue *q, struct kitem *__c)
 
   /* Prepopulate the request buf with the beginning of the requested file */
   ret = read(file_fd, r.buf, sizeof(r.buf));
+  if (ret < 0) {
+    logger(ERROR, "Failed to read file", "...", 0);
+    close(file_fd);
+    maybe_destroy_connection(q, c);
+	return;
+  }
 
   /* Prepare the header info + a blank line */
   sprintf(r.rsp_header, page_data[OK_HEADER], VERSION, len, fstr);
