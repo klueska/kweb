@@ -79,9 +79,9 @@ void sig_int(int signo);
 void sig_pipe(int signo);
 
 struct tpool tpool;
+struct kqueue kqueue;
 struct kstats kstats;
 static int listenfd;
-static struct kqueue kqueue;
 static struct cpu_util cpu_util;
 static struct server_stats server_stats = {0};
 
@@ -174,16 +174,14 @@ static int extract_request(struct http_connection *c,
   }
 }
 
-static void enqueue_connection_tail(struct kqueue *q,
-                                    struct http_connection *c)
+void enqueue_connection_tail(struct kqueue *q, struct http_connection *c)
 {
   __sync_fetch_and_add(&c->ref_count, 1);
   kqueue_enqueue_item_tail(q, &c->conn);
   tpool_wake(&tpool, 1);
 }
 
-static void enqueue_connection_head(struct kqueue *q,
-                                    struct http_connection *c)
+void enqueue_connection_head(struct kqueue *q, struct http_connection *c)
 {
   __sync_fetch_and_add(&c->ref_count, 1);
   kqueue_enqueue_item_head(q, &c->conn);
@@ -484,15 +482,7 @@ int main(int argc, char **argv)
       logger(ERROR, "System call", "accept", 0);
     }
     else {
-      struct http_connection *c;
-      c = kqueue_create_item(&kqueue);
-      c->burst_length = MAX_BURST;
-      c->ref_count = 0;
-      c->socketfd = socketfd;
-      c->buf_length = 0;
-      pthread_mutex_init(&c->writelock, NULL);
-	  init_connection(c);
-      enqueue_connection_tail(&kqueue, c);
+		dispatch_call(socketfd, (void*)&cli_addr);
     }
   }
 }
@@ -515,4 +505,3 @@ void sig_pipe(int signo)
     logger(LOG, "SIGPIPE caught.", "", 0);
   }
 }
-

@@ -60,6 +60,31 @@ ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
 }
 
 
+void dispatch_call(int call_fd, void *client_addr)
+{
+
+	printf("Would like to dispatch %d to VC 1\n", call_fd);
+
+}
+
+__thread struct kqueue __vc_kqueue;
+
+/* Called by a vcore when it gets a new connection */
+static void new_conv(int call_fd)
+{
+	  struct kqueue *vc_kq = &__vc_kqueue;
+      struct http_connection *c;
+
+      c = kqueue_create_item(vc_kq);	// allocation, could block
+      c->burst_length = MAX_BURST;
+      c->ref_count = 0;
+      c->socketfd = call_fd;
+      c->buf_length = 0;
+      pthread_mutex_init(&c->writelock, NULL); // TODO: use something else
+	  init_connection(c);
+      enqueue_connection_tail(vc_kq, c);
+}
+
 /* Faking tpool and kstats */
 
 void tpool_resize(struct tpool *t, int size)

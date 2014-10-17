@@ -65,3 +65,18 @@ ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
   }
   return count;
 }
+
+void dispatch_call(int call_fd, void *client_addr)
+{
+  extern struct kqueue kqueue; /* global, kweb.c */
+  struct http_connection *c;
+
+  c = kqueue_create_item(&kqueue);
+  c->burst_length = MAX_BURST;
+  c->ref_count = 0;
+  c->socketfd = call_fd;
+  c->buf_length = 0;
+  pthread_mutex_init(&c->writelock, NULL);
+  init_connection(c);
+  enqueue_connection_tail(&kqueue, c);
+}
