@@ -90,10 +90,10 @@ static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
 {
   tpool_inform_blocking(&tpool);
-  pthread_mutex_lock(&c->writelock);
+  mutex_lock(&c->writelock);
   tpool_inform_unblocked(&tpool);
   ssize_t ret = timed_write(c, buf, count);
-  pthread_mutex_unlock(&c->writelock);
+  mutex_unlock(&c->writelock);
   return ret;
 }
 
@@ -348,7 +348,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Start sending a response */
   logger(LOG, "SEND", &request_line[5], c->conn.id);
   tpool_inform_blocking(&tpool);
-  pthread_mutex_lock(&c->writelock);
+  mutex_lock(&c->writelock);
   tpool_inform_unblocked(&tpool);
   timed_write(c, r.rsp_header, strlen(r.rsp_header));
   /* Send the file itself in 8KB chunks - last block may be smaller */
@@ -356,7 +356,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
     if(timed_write(c, r.buf, ret) < 0)
       logger(LOG, "Write error on socket.", "", c->socketfd);
   } while((ret = read(file_fd, r.buf, sizeof(r.buf))) > 0);
-  pthread_mutex_unlock(&c->writelock);
+  mutex_unlock(&c->writelock);
 
   close(file_fd);
   maybe_destroy_connection(q, c);

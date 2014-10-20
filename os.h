@@ -19,6 +19,11 @@ static inline long futex_wake(int *addr, int count)
   return futex(addr, FUTEX_WAKE, count, NULL, NULL, 0);
 }
 
+#define mutex_lock(x) pthread_mutex_lock(x)
+#define mutex_unlock(x) pthread_mutex_unlock(x)
+#define mutex_init(x) pthread_mutex_init(x, 0)
+#define mutex_t pthread_mutex_t
+
 #define KWEB_STACK_SZ (PGSIZE * 4)
 
 #else /* linux */
@@ -39,6 +44,11 @@ static inline long futex_wake(int *addr, int count)
 {
   return syscall(SYS_futex, addr, FUTEX_WAKE, count);
 }
+
+#define mutex_lock(x) pthread_mutex_lock(x)
+#define mutex_unlock(x) pthread_mutex_unlock(x)
+#define mutex_init(x) pthread_mutex_init(x, 0)
+#define mutex_t pthread_mutex_t
 
 #define KWEB_STACK_SZ (PTHREAD_STACK_MIN * 4)
 

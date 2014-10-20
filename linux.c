@@ -93,7 +93,7 @@ void dispatch_call(int call_fd, void *client_addr)
   c->ref_count = 0;
   c->socketfd = call_fd;
   c->buf_length = 0;
-  pthread_mutex_init(&c->writelock, NULL);
+  mutex_init(&c->writelock);
   init_connection(c);
   enqueue_connection_tail(&kqueue, c);
 }

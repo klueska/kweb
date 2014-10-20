@@ -40,7 +40,7 @@ struct http_connection {
   int socketfd;
   int buf_length;
   char buf[BUFSIZE+1];
-  pthread_mutex_t writelock;
+  mutex_t writelock;
   /* TODO: these are linux specific, consider hiding them better */
   int epollrfd;
   int epollwfd;
