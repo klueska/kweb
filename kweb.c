@@ -463,6 +463,12 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+#ifdef __ros__
+	pthread_can_vcore_request(FALSE);	/* 2LS won't manage vcores */
+	pthread_need_tls(FALSE);
+	pthread_lib_init();					/* gives us one vcore */
+#endif /* __ros__ */
+
   /* Initialize necessary data structures */
   kqueue_init(&kqueue, sizeof(struct http_connection));
   tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
