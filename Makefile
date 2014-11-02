@@ -9,7 +9,7 @@ linux:
 	gcc -std=gnu99 $(LIN_FILES) linux.c -o kweb -lpthread
 
 akaros:
-	x86_64-ros-gcc -std=gnu99 $(AKA_FILES) akaros.c -o kweb -lpthread -lbenchutil -lbsd
+	x86_64-ros-gcc -std=gnu99 $(AKA_FILES) akaros.c -o kweb -lbenchutil -lbsd
 
 clean:
 	rm -rf kweb

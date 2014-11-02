@@ -1,28 +1,31 @@
 #ifndef OS_H
 #define OS_H
 
-#define I_AM_HERE printf("Core x is in %s() at %s:%d\n", \
-                         __FUNCTION__, __FILE__, __LINE__);
-
 #ifdef __ros__
 
 #include <spinlock.h>
 #include <futex.h>
 
-static inline long futex_wait(int *addr, int val)
-{
-  return futex(addr, FUTEX_WAIT, val, NULL, NULL, 0);
-}
+#define I_AM_HERE printf("Core %d is in %s() at %s:%d\n", vcore_id(), \
+                         __FUNCTION__, __FILE__, __LINE__);
 
-static inline long futex_wake(int *addr, int count)
-{
-  return futex(addr, FUTEX_WAKE, count, NULL, NULL, 0);
-}
+/* Need this here since the connection struct includes a mutex_t */
+struct wthread;
+TAILQ_HEAD(wthread_queue, wthread);
 
-#define mutex_lock(x) pthread_mutex_lock(x)
-#define mutex_unlock(x) pthread_mutex_unlock(x)
-#define mutex_init(x) pthread_mutex_init(x, 0)
-#define mutex_t pthread_mutex_t
+typedef struct {
+	struct wthread_queue		waiters;
+	bool						in_use;
+} rutex_t;
+
+void wthread_rutex_init(rutex_t *m);
+void wthread_rutex_lock(rutex_t *m);
+void wthread_rutex_unlock(rutex_t *m);
+
+#define mutex_lock(x) wthread_rutex_lock(x)
+#define mutex_unlock(x) wthread_rutex_unlock(x)
+#define mutex_init(x) wthread_rutex_init(x);
+#define mutex_t rutex_t
 
 #define KWEB_STACK_SZ (PGSIZE * 4)
 
@@ -34,6 +37,9 @@ static inline long futex_wake(int *addr, int count)
 #include <sys/syscall.h>
 #include <limits.h>
 #include <sys/epoll.h>
+
+#define I_AM_HERE printf("Core x is in %s() at %s:%d\n", \
+                         __FUNCTION__, __FILE__, __LINE__);
 
 static inline long futex_wait(int *addr, int val)
 {
