@@ -218,12 +218,30 @@ void wthread_exit(void);
 struct wthread *wthread_self(void);
 int __wthread_create(wthread_t *thread, void (*func)(void *, void *),
                      void *arg0, void *arg1);
+int wthread_yield(void);
 
 /******************************************************************************/
 /* Stuff Kweb expects us to have */
 
+struct kqueue				global_conns;
+struct spin_pdr_lock 		gl_list_lock;
+struct wthread_queue		gl_runnables;
+struct spin_pdr_lock 		gl_zombie_lock;
+struct wthread_queue		gl_zombies;
+atomic_t					gl_total_threads;
+
 void os_init(void)
 {
+	// XXX G
+	kqueue_init(&global_conns, sizeof(struct http_connection));
+	spin_pdr_init(&gl_list_lock);
+	TAILQ_INIT(&gl_runnables);
+	spin_pdr_init(&gl_zombie_lock);
+	TAILQ_INIT(&gl_zombies);
+	atomic_init(&gl_total_threads, 1);
+
+
+
 	wthread_lib_init(); // 1 VC
 	vcore_request(3); // XXX 0 + enough for 1 non-hype worker (4 total)
 	//vcore_request(1);	/* one worker vcore, grow by instruction or on demand */
@@ -254,13 +272,17 @@ ssize_t timed_read(struct http_connection *c, void *buf, size_t count)
 	waiter.data = current_uthread;
 
 	set_awaiter_rel(&waiter, KWEB_SREAD_TIMEOUT * 1000);
-	//set_alarm(&waiter);
+	#ifdef ALARM
+	set_alarm(&waiter);
+	#endif
 
 	tpool_inform_blocking(&tpool);
 	ret = read(c->socketfd, buf, count);
 	tpool_inform_unblocked(&tpool);
 
-	//unset_alarm(&waiter);
+	#ifdef ALARM
+	unset_alarm(&waiter);
+	#endif
 	return ret;
 }
 
@@ -273,13 +295,17 @@ ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
 	waiter.data = current_uthread;
 
 	set_awaiter_rel(&waiter, KWEB_SREAD_TIMEOUT * 1000);
-	//set_alarm(&waiter);
+	#ifdef ALARM
+	set_alarm(&waiter);
+	#endif
 
 	tpool_inform_blocking(&tpool);
 	ret = write(c->socketfd, buf, count);
 	tpool_inform_unblocked(&tpool);
 
-	//unset_alarm(&waiter);
+	#ifdef ALARM
+	unset_alarm(&waiter);
+	#endif
 	return ret;
 }
 
@@ -302,6 +328,8 @@ void dispatch_call(int call_fd, void *client_addr)
 	int num_vc = num_vcores();
 	int i, j, fd = call_fd;
 
+// XXX G 0 for global 2LS
+#ifdef PVC_2LS
 	for (i = next_vc, j = 0; j < num_vc; i = get_next_vc(i), j++) {
 		if (!can_deliver_to(i))
 			continue;
@@ -318,6 +346,19 @@ void dispatch_call(int call_fd, void *client_addr)
 		printf("Failed to enqueue!\n");	// remove this later! XXX
 		close(fd);	// XXX hangup/reset
 	}
+#else
+	struct http_connection *c;
+
+	c = kqueue_create_item(&global_conns);	// allocation, could block
+	c->burst_length = MAX_BURST;
+	c->ref_count = 0;
+	c->socketfd = call_fd;
+	c->buf_length = 0;
+	mutex_init(&c->writelock);
+	init_connection(c);
+	enqueue_connection_tail(&global_conns, c);
+
+#endif
 	/* TODO vcore control */
 
 }
@@ -477,6 +518,25 @@ static void wth_handle_user_ipi(struct event_msg *ev_msg, unsigned int ev_type,
 		       ts.tv_sec, ts.tv_nsec / 1000,
 		       MIN((vcm_i->total_idle_ticks * 100) / total_ticks, 100));
 	}
+
+	// XXX G 
+	unsigned long total = 0;
+	unsigned long run = 0;
+	unsigned long zom = 0;
+	unsigned long bm = 0;
+	unsigned long bs = 0;
+	for (int i = 0; i < num_vcores(); i++) {
+		vcm_i = &vc_mgmt[i];
+		total += vcm_i->nr_total;
+		run += vcm_i->nr_runnables;
+		zom += vcm_i->nr_zombies;
+		bm += vcm_i->nr_blk_mutex;
+		bs += vcm_i->nr_blk_sysc;
+	}
+
+	printf("TOT %lu: T %lu, R %lu, Z %lu, BM %lu, BS %lu, KQ %d\n",
+	       atomic_read(&gl_total_threads), total, run, zom, bm, bs,
+		   global_conns.qstats.size);
 }
 
 struct schedule_ops wthread_sched_ops = {
@@ -595,6 +655,8 @@ void __attribute__((noreturn)) wth_sched_entry(void)
 		handle_events(vcoreid);
 		__check_preempt_pending(vcoreid);
 
+		// XXX G   0 for global 2LS
+#ifdef PVC_2LS
 		/* TODO: check for new connections, add them to old conn list */
 		/* 10 is arbitrary... see notes above */
 
@@ -618,7 +680,8 @@ void __attribute__((noreturn)) wth_sched_entry(void)
 		}
 
 		/* 25 for 4 VC, 100 conn.  */
-		if (vcm->nr_total - vcm->nr_zombies > 100)
+			// been doing 100 each recently.  change it up?
+		if (vcm->nr_total - vcm->nr_zombies >= MAX_NR_THREADS)
 			goto idle;
 
 		/* TODO: check for new calls on existing/new connections */
@@ -634,6 +697,36 @@ void __attribute__((noreturn)) wth_sched_entry(void)
 			wth->state = WTH_RUNNABLE;	/* bypassing rq */
 			break;
 		}
+
+#else
+		spin_pdr_lock(&gl_list_lock);
+		wth = TAILQ_FIRST(&gl_runnables);
+		if (wth) {
+			printd("VC %d got runnable %p\n", vcore_id(), wth);
+			TAILQ_REMOVE(&gl_runnables, wth, next);
+			vcm->nr_runnables--;
+			spin_pdr_unlock(&gl_list_lock);
+			break;
+		}
+		spin_pdr_unlock(&gl_list_lock);
+
+		if (atomic_read(&gl_total_threads) >= MAX_NR_THREADS)
+			goto idle;
+
+		next_conn = kqueue_dequeue_item(&global_conns);
+		if (next_conn) {
+			if (__wthread_create(&wth, (void*)http_server, &global_conns,
+			                     next_conn)) {
+				// failed to make a thread (it panic'd already, deal with it)
+				;	
+			}
+			atomic_inc(&gl_total_threads);
+			wth->state = WTH_RUNNABLE;	/* bypassing rq */
+			break;
+		}
+#endif
+
+
 
 idle:
 		if (vcm->tracking_idle_time) {
@@ -658,6 +751,30 @@ idle:
 	assert(0);
 }
 
+static void __enqueue_head(struct vc_mgmt *vcm, struct wthread *wthread)
+{
+// XXX G
+#ifdef PVC_2LS
+	TAILQ_INSERT_HEAD(&vcm->runnables, wthread, next);
+#else
+	spin_pdr_lock(&gl_list_lock);
+	TAILQ_INSERT_HEAD(&gl_runnables, wthread, next);
+	spin_pdr_unlock(&gl_list_lock);
+#endif
+}
+
+static void __enqueue_tail(struct vc_mgmt *vcm, struct wthread *wthread)
+{
+// XXX G
+#ifdef PVC_2LS
+	TAILQ_INSERT_TAIL(&vcm->runnables, wthread, next);
+#else
+	spin_pdr_lock(&gl_list_lock);
+	TAILQ_INSERT_TAIL(&gl_runnables, wthread, next);
+	spin_pdr_unlock(&gl_list_lock);
+#endif
+}
+
 /* A common mistake with thread_runnable is to think it only runs in VC context.
  * Typically, it can run from uthread context, either after a create (as in
  * pthreads) or when mutexes unblock. */
@@ -678,18 +795,26 @@ void wth_thread_runnable(struct uthread *uthread)
 		case (WTH_CREATED):
 		case (WTH_BLK_YIELDING):
 		case (WTH_BLK_PAUSED):
+			wthread->state = WTH_RUNNABLE;
+			__enqueue_tail(vcm, wthread);
 			break;
 		case (WTH_BLK_SYSC):
+			wthread->state = WTH_RUNNABLE;
+#ifdef PREFER_UNBLOCKED_SYSC
+			__enqueue_head(vcm, wthread);
+#else
+			__enqueue_tail(vcm, wthread);
+#endif
 			vcm->nr_blk_sysc--;
 			break;
 		case (WTH_BLK_MUTEX):
+			wthread->state = WTH_RUNNABLE;
+			__enqueue_tail(vcm, wthread);
 			vcm->nr_blk_mutex--;
 			break;
 		default:
 			printf("Odd state %d for wthread %08p\n", wthread->state, wthread);
 	}
-	wthread->state = WTH_RUNNABLE;
-	TAILQ_INSERT_TAIL(&vcm->runnables, wthread, next);
 	vcm->nr_runnables++;
 	uth_enable_notifs();
 	/* TODO: vc control */
@@ -888,13 +1013,30 @@ void wthread_lib_init(void)
 static void __wthread_run(void)
 {
 	struct wthread *me = wthread_self();
+
 	me->func(me->arg0, me->arg1);
+
+// XXX G  TDI
+#ifdef TDI
+	struct kitem *next_conn;
+	/* i don't like this policy.  starts new while old might need work.  but
+	 * with the yield it lets older stuff run.  saves a little on thread
+	 * destruction? */
+	while ((next_conn = kqueue_dequeue_item(me->arg0))) {
+		me->func(me->arg0, next_conn);
+#ifdef TDI_YIELDS
+		wthread_yield(); // XXX G try dropping in and out
+#endif
+	}
+#endif
+
 	wthread_exit();
 }
 
 struct wthread *__wth_reanimate(void)
 {
 	struct vc_mgmt *vcm = &vc_mgmt[vcore_id()];
+#ifdef PVC_2LS
 	struct wthread *wth = TAILQ_FIRST(&vcm->zombies);
 	if (!wth)
 		return 0;
@@ -904,6 +1046,21 @@ struct wthread *__wth_reanimate(void)
 	 * keep stuff though, like the stack, id, etc)  */
 	wth->state = WTH_CREATED;
 	return wth;
+#else
+	spin_pdr_lock(&gl_zombie_lock);
+	struct wthread *wth = TAILQ_FIRST(&gl_zombies);
+	if (!wth) {
+		spin_pdr_unlock(&gl_zombie_lock);
+		return 0;
+	}
+	TAILQ_REMOVE(&gl_zombies, wth, next);
+	spin_pdr_unlock(&gl_zombie_lock);
+	vcm->nr_zombies--;
+	/* consider 0'ing the uthread/wthread, at least flags and sysc. (want to
+	 * keep stuff though, like the stack, id, etc)  */
+	wth->state = WTH_CREATED;
+	return wth;
+#endif
 }
 
 int __wthread_create(wthread_t *thread, void (*func)(void *, void *),
@@ -949,13 +1106,20 @@ void __wthread_generic_yield(struct wthread *wthread)
 static void __wth_exit_cb(struct uthread *uthread, void *junk)
 {
 	struct wthread *wthread = (struct wthread*)uthread;
-	struct wthread *temp_pth = 0;
 	struct vc_mgmt *vcm = &vc_mgmt[vcore_id()];
+
 	__wthread_generic_yield(wthread);
 	wthread->state = WTH_ZOMBIE;
 	printd("uth %p exiting\n", uthread);
+#ifdef PVC_2LS
 	TAILQ_INSERT_HEAD(&vcm->zombies, wthread, next);
+#else
+	spin_pdr_lock(&gl_zombie_lock);
+	TAILQ_INSERT_HEAD(&gl_zombies, wthread, next);
+	spin_pdr_unlock(&gl_zombie_lock);
+#endif
 	vcm->nr_zombies++;
+	atomic_dec(&gl_total_threads);
 }
 
 /* In case we want to clean up */
@@ -1028,6 +1192,109 @@ void wthread_rutex_unlock(rutex_t *m)
 		wth_thread_runnable((struct uthread*)waiter);
 	}
 }
+
+// XXX G 1 for mutex, 0 brutex, change header
+#ifndef BRUTEX
+/* non-racy versions, usable cross-core */
+static void __wth_mutex_cb(struct uthread *uthread, void *mutex)
+{
+	struct vc_mgmt *vcm = &vc_mgmt[vcore_id()];
+	struct wthread *wthread = (struct wthread*)uthread;
+	mutex_t *m = (mutex_t*)mutex;
+
+	__wthread_generic_yield(wthread);
+	wthread->state = WTH_BLK_MUTEX;
+	vcm->nr_blk_mutex++;
+
+	spin_pdr_unlock(&m->lock);
+}
+
+void wthread_mutex_init(mutex_t *m)
+{
+	TAILQ_INIT(&m->waiters);
+	spin_pdr_init(&m->lock);
+	m->in_use = FALSE;
+}
+
+void wthread_mutex_lock(mutex_t *m)
+{
+	spin_pdr_lock(&m->lock); // disable depth might get messed up
+	if (!m->in_use) {
+		m->in_use = TRUE;
+		spin_pdr_unlock(&m->lock);
+		return;
+	}
+	TAILQ_INSERT_TAIL(&m->waiters, wthread_self(), next);
+	uthread_yield(TRUE, __wth_mutex_cb, m);
+}
+
+void wthread_mutex_unlock(mutex_t *m)
+{
+	struct wthread *waiter;
+	
+	spin_pdr_lock(&m->lock);
+	waiter = TAILQ_FIRST(&m->waiters);
+	if (!waiter) {
+		m->in_use = FALSE;
+		spin_pdr_unlock(&m->lock);
+	} else {
+		/* FIFO, might want something else */
+		TAILQ_REMOVE(&m->waiters, waiter, next);
+		/* in_use is still TRUE, passing the lock off, hoare style */
+		spin_pdr_unlock(&m->lock);
+		wth_thread_runnable((struct uthread*)waiter);
+	}
+}
+
+#else // brutex
+
+// XXX G
+static inline void spin_to_sleep(unsigned int spins, unsigned int *spun)
+{
+	if ((*spun)++ == spins) {
+		wthread_yield();
+		*spun = 0;
+	}
+}
+
+void wthread_brutex_init(brutex_t *m)
+{
+	atomic_init(&m->lock, 0);
+}
+
+int wthread_brutex_trylock(brutex_t *m)
+{
+	return atomic_swap(&m->lock, 1) == 0 ? 0 : EBUSY;
+}
+
+void wthread_brutex_lock(brutex_t *m)
+{
+	unsigned int spinner = 0;
+	while (wthread_brutex_trylock(m))
+		while (*(volatile size_t*)&m->lock) {
+			cpu_relax();
+			// XXX G
+#ifdef BRUTEX_YIELD_IMMEDIATELY
+			wthread_yield();
+#else
+			spin_to_sleep(100, &spinner);
+#endif
+		}
+	/* normally we'd need a wmb() and a wrmb() after locking, but the
+	 * atomic_swap handles the CPU mb(), so just a cmb() is necessary. */
+	cmb();
+}
+
+void wthread_brutex_unlock(brutex_t* m)
+{
+	/* keep reads and writes inside the protected region */
+	rwmb();
+	wmb();
+	atomic_set(&m->lock, 0);
+}
+
+#endif
+
 
 struct wthread *wthread_self(void)
 {
