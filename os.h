@@ -74,7 +74,7 @@ void wthread_brutex_unlock(brutex_t *m);
 
 #endif
 
-#if 0
+#if 1
 #define spinlock_t struct spin_pdr_lock
 #define spinlock_init(x) spin_pdr_init(x)
 #define spinlock_lock(x) spin_pdr_lock(x)

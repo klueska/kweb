@@ -554,6 +554,8 @@ static void wth_handle_user_ipi(struct event_msg *ev_msg, unsigned int ev_type,
 	unsigned long zom = 0;
 	unsigned long bm = 0;
 	unsigned long bs = 0;
+	int gl_runq_len = 0;
+	struct wthread *dummy;
 	for (int i = 0; i < num_vcores(); i++) {
 		vcm_i = &vc_mgmt[i];
 		total += vcm_i->nr_total;
@@ -562,10 +564,14 @@ static void wth_handle_user_ipi(struct event_msg *ev_msg, unsigned int ev_type,
 		bm += vcm_i->nr_blk_mutex;
 		bs += vcm_i->nr_blk_sysc;
 	}
+	spin_pdr_lock(&gl_list_lock);
+	TAILQ_FOREACH(dummy, &gl_runnables, next)
+		gl_runq_len++;
+	spin_pdr_unlock(&gl_list_lock);
 
-	printf("TOT %lu: T %lu, R %lu, Z %lu, BM %lu, BS %lu, KQ %d\n",
+	printf("TOT %lu: T %lu, R %lu, Z %lu, BM %lu, BS %lu, KQ %d, GRQ %d\n",
 	       atomic_read(&gl_total_threads), total, run, zom, bm, bs,
-		   global_conns.qstats.size);
+		   global_conns.qstats.size, gl_runq_len);
 }
 
 struct schedule_ops wthread_sched_ops = {
@@ -728,7 +734,7 @@ void __attribute__((noreturn)) wth_sched_entry(void)
 			if (__wthread_create(&wth, (void*)http_server, &vcm->conns,
 			                     next_conn)) {
 				// failed to make a thread (it panic'd already, deal with it)
-				;	
+				;
 			}
 			printd("VC %d made new thread %p for conn fd %d\n", vcore_id(), wth,
 			       ((struct http_connection*)next_conn)->socketfd);
@@ -756,7 +762,7 @@ void __attribute__((noreturn)) wth_sched_entry(void)
 			if (__wthread_create(&wth, (void*)http_server, &global_conns,
 			                     next_conn)) {
 				// failed to make a thread (it panic'd already, deal with it)
-				;	
+				;
 			}
 			atomic_inc(&gl_total_threads);
 			wth->state = WTH_RUNNABLE;	/* bypassing rq */
