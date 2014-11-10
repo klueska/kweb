@@ -31,6 +31,7 @@ static struct url_cmd url_cmds[] = {
 	{"start_measurements", start_measurements},
 	{"stop_measurements", stop_measurements},
 	{"add_vcores", add_vcores},
+	{"yield_pcores", yield_pcores},
 	{"terminate", terminate}
 };
 
@@ -146,13 +147,52 @@ char *add_vcores(void *__params) {
 
 #else
 	if (my_params.num_vcores < -1) {
-		bp += sprintf(bp, "Error: you must specify a query srtring parameter"
+		bp += sprintf(bp, "Error: you must specify a query srtring parameter "
 		                  "of \"num_vcores=\" that is > 0");
 	} else {
 		vcore_request(my_params.num_vcores);
-		bp += sprintf(bp, "Success: you now have requests granted or pending"
+		bp += sprintf(bp, "Success: you now have requests granted or pending "
 		                  "for %d vcores.",
 		              __procdata.res_req[RES_CORES].amt_wanted);
+	}
+#endif
+	return buf;
+}
+
+char *yield_pcores(void *__params) {
+	int ret;
+	struct {
+		int pcoreid;
+	} my_params = {-1};
+
+	if (__params) {
+		struct query_param *p = (struct query_param*)__params;
+		for (int i=0; i < MAX_PARAMS; i++) {
+			if (p[i].key == NULL)
+				break;
+			else if (!strcmp(p[i].key, "pcoreid"))
+				my_params.pcoreid = atoi(p[i].value);
+		}
+	}
+	char *buf = malloc(256);
+	char *bp = buf;
+
+#ifndef __ros__
+	bp += sprintf(bp, "Error: only supported on Akaros");
+
+#else
+	if (my_params.pcoreid < -1) {
+		bp += sprintf(bp, "Error: you must specify a query srtring parameter "
+		                  "of \"pcoreid=\" that is > 0");
+	} else {
+		ret = yield_pcore(my_params.pcoreid);
+		udelay(10000); /* give some time for the yield to kick in, might fail */
+		if (!ret)
+			bp += sprintf(bp, "Success: you now have %d vcores wanted",
+			              __procdata.res_req[RES_CORES].amt_wanted);
+		else
+			bp += sprintf(bp, "Something failed: you have %d vcores wanted",
+			              __procdata.res_req[RES_CORES].amt_wanted);
 	}
 #endif
 	return buf;

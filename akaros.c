@@ -202,6 +202,7 @@ struct vc_mgmt
 	bool						tracking_idle_time;
 
 	bool						accepting_conns;
+	bool						should_yield;
 
 	struct new_conn_bcq 		new_conns;			/* TODO cache align */
 	struct event_queue			*ev_q;
@@ -349,6 +350,7 @@ void dispatch_call(int call_fd, void *client_addr)
 #else
 	struct http_connection *c;
 
+	/* TODO: work with the new_con helper */
 	c = kqueue_create_item(&global_conns);	// allocation, could block
 	c->burst_length = MAX_BURST;
 	c->ref_count = 0;
@@ -357,11 +359,37 @@ void dispatch_call(int call_fd, void *client_addr)
 	mutex_init(&c->writelock);
 	c->should_close = 0;
 	init_connection(c);
-	enqueue_connection_tail(&global_conns, c);
+
+	/* TODO: putting new ones on the head, so we don't take forever responding to
+	 * urlcmds.  poor man's "priority based on url".  since we don't extract a
+	 * request (to know the URL) til we decide to work on it, we'll need a
+	 * better mechanism.  Mostly done for the ghetto tput test. */
+	//enqueue_connection_tail(&global_conns, c); /* was this */
+	enqueue_connection_head(&global_conns, c);
 
 #endif
 	/* TODO vcore control */
 
+}
+
+/* a better way to do all of this yielding would be similar to the preemption
+ * handling: need to clean up, then yield.  For preemption, it's clean up, then
+ * do a sys_change_to.  Both cases could fail.  For the actual yield, we could
+ * have an actual event for it (pick a number, self-notify bypasses the kernel
+ * event table. */
+int yield_pcore(int pcoreid)
+{
+	int target = __procinfo.pcoremap[pcoreid].vcoreid;
+	struct vc_mgmt *target_vcm = &vc_mgmt[target];
+	/* this is a bit racy.  we can't be guaranteed the vcore is still on that
+	 * pcore when it yields later.  to do this properly, send the pcoreid along
+	 * as part of the message, so that it can conditionally yield.  maybe send
+	 * the seq too, if we're concerned about a lot of time passing. */
+	if (!__procinfo.pcoremap[pcoreid].valid)
+		return -1;
+	target_vcm->should_yield = TRUE;
+	sys_self_notify(target, EV_NONE, 0, TRUE);
+	return 0;
 }
 
 /* Faking tpool and kstats */
@@ -606,10 +634,8 @@ static void hyperthreading_hacks(void)
 			 * change to us */
 			cmb();
 		}
-		/* ugh, this doesn't give us back pcore 1.  now we have a hole again */
-		// 9 is fucked too.  that depends on how many evens vs odds
-		while (__procdata.res_req[RES_CORES].amt_wanted < 4)
-			vcore_request(1);
+		/* TODO: since we turn off odds, we need some way to make sure we have
+		 * enough workers. */
 
 	} else {
 		while (__procinfo.vcoremap[vcoreid].pcoreid == 2) {
@@ -620,6 +646,15 @@ static void hyperthreading_hacks(void)
 		}
 		while (__procinfo.vcoremap[vcoreid].pcoreid % 2 == 1) {
 			vcm->accepting_conns = FALSE;
+			if (vcm->should_yield) {
+				vcm->should_yield = FALSE;
+				for (int i = 0; i < 10; i++) {
+					/* returns if we missed a message.  prob shouldn't happen
+					 * much with these hacks. */
+					vcore_yield(FALSE);
+				}
+				printf("VC %d failed to yield 10 times!\n", vcoreid);
+			}
 			/* will not return (as of current hacks) */
 				// wrong, an IPI will break out of the halt, we'll return.  we
 				// just might not get a notif.  also, we pretend like we're a
@@ -654,6 +689,7 @@ void __attribute__((noreturn)) wth_sched_entry(void)
 
 	do {
 		printd("VC %d about to handle events\n", vcore_id());
+		/* handle events clears notif pending */
 		handle_events(vcoreid);
 		__check_preempt_pending(vcoreid);
 
@@ -731,6 +767,20 @@ void __attribute__((noreturn)) wth_sched_entry(void)
 
 
 idle:
+		if (vcm->should_yield) {
+			/* TODO: need to drain our BCQ and kqueue (PVC2LS) */
+			/* TODO: need to handle oustanding syscalls that might only come to
+			 * our core (evq IPI stuff), see below. */
+			vcm->accepting_conns = FALSE;
+			/* might fail, if there was an event, etc.  not clear how to clean
+			 * up, esp for the PVC case, though this is just a replacement for a
+			 * real brain. */
+			vcm->should_yield = FALSE; /* in case we come up naturally */
+			vcore_yield(FALSE);
+			/* could return on failure, and we want to try again.  might be some
+			 * issues with this, if add_vcores happens before we yield. */
+			vcm->should_yield = TRUE;
+		}
 		if (vcm->tracking_idle_time) {
 			uint64_t now = read_tsc();
 			/* only track if the previous loop was idle */
@@ -988,9 +1038,11 @@ void wthread_lib_init(void)
 		vc_mgmt[i].tracking_idle_time = FALSE;
 
 		vc_mgmt[i].accepting_conns = FALSE;
+		vc_mgmt[i].should_yield = FALSE;
 
 		bcq_init(&vc_mgmt[i].new_conns, int, NEW_CONN_BCQ_SZ);
-#if 0
+
+#if 0  	/* classic pthread approach */
 		/* TODO: IPI, for now.  might poll later.  indir is a toss-up too.
 		 * though the current sched assumes threads don't migrate. */
 		vc_mgmt[i].ev_q = get_big_event_q_raw();
@@ -1000,14 +1052,30 @@ void wthread_lib_init(void)
 		             mmap_block + (2 * i    ) * PGSIZE, 
 		             mmap_block + (2 * i + 1) * PGSIZE); 
 #else
+		/* TODO this needs a little more thought if we want to yield vcores.
+		 * might be able to do the pub mbox, but we'd need to change the mbox
+		 * pointer to a global mbox, have other cores poll our pub while we're
+		 * offline, or track our outstanding syscalls. */
+
+		/* Hyper-aggressive settings */
 		/* public vcpd mbox: will poll when we handle_events() */
-		vc_mgmt[i].ev_q = get_event_q_vcpd(i, 0);
-		vc_mgmt[i].ev_q->ev_flags = 0;
+		//vc_mgmt[i].ev_q = get_event_q_vcpd(i, 0);
+		//vc_mgmt[i].ev_q->ev_flags = 0;
+
+
+		vc_mgmt[i].ev_q = get_big_event_q_raw();
+		vc_mgmt[i].ev_q->ev_flags = EVENT_INDIR | EVENT_FALLBACK;
+		vc_mgmt[i].ev_q->ev_vcore = i;
+		ucq_init_raw(&vc_mgmt[i].ev_q->ev_mbox->ev_msgs,
+		             mmap_block + (2 * i    ) * PGSIZE,
+		             mmap_block + (2 * i + 1) * PGSIZE);
 #endif
 
 	}
 	register_ev_handler(EV_SYSCALL, wth_handle_syscall, 0);
 	register_ev_handler(EV_USER_IPI, wth_handle_user_ipi, 0);
+	// XXX this is buggy - what if VC 0 goes offline?  (possible with the global
+	// version and yielding)
 	enable_kevent(EV_USER_IPI, 0, EVENT_IPI | EVENT_VCORE_PRIVATE);
 	uthread_lib_init((struct uthread*)t);
 }

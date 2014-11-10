@@ -83,6 +83,7 @@ void wthread_brutex_unlock(brutex_t *m);
 
 #define KWEB_STACK_SZ (PGSIZE * 4)
 
+int yield_pcore(int pcoreid);
 
 #else /* linux */
 
