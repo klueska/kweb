@@ -158,6 +158,9 @@ static int extract_request(struct http_connection *c,
       c->buf_length = c->buf_length - len;
       memcpy(r->buf, c->buf, r->length);
       memmove(c->buf, &c->buf[r->length], c->buf_length);
+      /* honor some non-persistent clients */
+      if (strstr(r->buf, "Connection: close"))
+        c->should_close = 1;
       return len;
     }
 
@@ -194,6 +197,10 @@ static void maybe_destroy_connection(struct kqueue *q,
 {
   int count = __sync_add_and_fetch(&c->ref_count, -1);
   if(count == 0) {
+    /* if we're terminating the session, we should cancel/hangup first.  at this
+	 * point in the code, we don't really have that info.  could just blindly
+	 * hang-up.  best though is to track in *c whether or not the client closed
+	 * it or something. */
     close(c->socketfd);
 	destroy_connection(c);
     kqueue_destroy_item(q, &c->conn);
@@ -231,13 +238,14 @@ void http_server(struct kqueue *q, struct kitem *__c)
 
   /* Otherwise, just reenqueue the connection so another thread can grab the
    * next request and start processing it. */
-  if(c->burst_length) {
-    c->burst_length--;
-    enqueue_connection_head(q, c);
-  }
-  else {
-    c->burst_length = MAX_BURST;
-    enqueue_connection_tail(q, c);
+  if (!c->should_close) {
+    if(c->burst_length) {
+      c->burst_length--;
+      enqueue_connection_head(q, c);
+    } else {
+      c->burst_length = MAX_BURST;
+      enqueue_connection_tail(q, c);
+    }
   }
 
   /* Now parse through the extracted request, grabbing only what we care about */

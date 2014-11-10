@@ -41,6 +41,7 @@ struct http_connection {
   int buf_length;
   char buf[BUFSIZE+1];
   mutex_t writelock;
+  int should_close;
   /* TODO: these are linux specific, consider hiding them better */
   int epollrfd;
   int epollwfd;

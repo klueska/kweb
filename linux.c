@@ -94,6 +94,7 @@ void dispatch_call(int call_fd, void *client_addr)
   c->socketfd = call_fd;
   c->buf_length = 0;
   mutex_init(&c->writelock);
+  c->should_close = 0;
   init_connection(c);
   enqueue_connection_tail(&kqueue, c);
 }
