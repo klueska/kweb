@@ -191,7 +191,7 @@ static int extract_request(struct http_connection *c,
     /* Otherwise, try and read in the next request from the socket */
     ret = timed_read(c, &c->buf[c->buf_length], sizeof(c->buf) - c->buf_length);
 
-	/* If the return code is invalid or marks the end of a connection, just
+    /* If the return code is invalid or marks the end of a connection, just
      * return it. */
     if(ret <= 0)
       return ret;
@@ -218,13 +218,13 @@ static void enqueue_connection_head(struct kqueue *q,
   tpool_wake(&tpool, 1);
 }
 
-static void maybe_destroy_connection(struct kqueue *q,
+static bool maybe_destroy_connection(struct kqueue *q,
                                      struct http_connection *c)
 {
   int count = __sync_add_and_fetch(&c->ref_count, -1);
   if(count == 0) {
     close(c->socketfd);
-	destroy_connection(c);
+    destroy_connection(c);
     kqueue_destroy_item(q, &c->conn);
   }
 }
@@ -532,7 +532,7 @@ int main(int argc, char **argv)
       c->socketfd = socketfd;
       c->buf_length = 0;
       pthread_mutex_init(&c->writelock, NULL);
-	  init_connection(c);
+      init_connection(c);
       enqueue_connection_tail(&kqueue, c);
     }
   }
