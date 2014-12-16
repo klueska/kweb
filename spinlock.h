@@ -49,10 +49,15 @@ static void spinlock_lock(spinlock_t *lock)
     cpu_relax();
 }
 
-static void spinlock_unlock(spinlock_t *lock)
+static inline void spinlock_unlock(spinlock_t *lock)
 {
   __sync_lock_release(&lock->lock, 0);
 }
+
+#define spin_pdr_lock_t spinlock_t
+#define spin_pdr_init spinlock_init
+#define spin_pdr_lock spinlock_lock
+#define spin_pdr_unlock spinlock_unlock
 
 #ifdef __cplusplus
 }

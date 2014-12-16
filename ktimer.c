@@ -18,14 +18,14 @@ static void *__ktimer(void *arg)
   for(;;) {
     usleep(1000*t->period_ms);
 
-    spinlock_lock(&t->lock);
+    spin_pdr_lock(&t->lock);
     if(t->state == S_TIMER_STOPPING)
       break;
-    spinlock_unlock(&t->lock);
+    spin_pdr_unlock(&t->lock);
     t->callback(t->callback_arg);
   }
   t->state = S_TIMER_STOPPED;
-  spinlock_unlock(&t->lock);
+  spin_pdr_unlock(&t->lock);
 }
 
 void ktimer_init(struct ktimer *t, void (*callback)(void*), void* arg)
@@ -33,7 +33,7 @@ void ktimer_init(struct ktimer *t, void (*callback)(void*), void* arg)
   t->state = S_TIMER_STOPPED;
   t->callback = callback;
   t->callback_arg = arg;
-  spinlock_init(&t->lock);
+  spin_pdr_init(&t->lock);
 }
 
 int ktimer_start(struct ktimer *t, unsigned int period_ms)
@@ -55,9 +55,9 @@ int ktimer_stop(struct ktimer *t)
   if(t->state != S_TIMER_STARTED)
     return -1;
 
-  spinlock_lock(&t->lock);
+  spin_pdr_lock(&t->lock);
   t->state = S_TIMER_STOPPING;
-  spinlock_unlock(&t->lock);
+  spin_pdr_unlock(&t->lock);
   while(t->state != S_TIMER_STOPPED) {
     pthread_yield();
     cpu_relax();

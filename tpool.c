@@ -14,14 +14,14 @@ static void *__thread_wrapper(void *arg)
 
   while(1) {
     i = NULL;
-    spinlock_lock(&t->lock);
+    spin_pdr_lock(&t->lock);
     if(t->stats.active_threads < t->nprocs)
       i = kqueue_dequeue_item(t->q);
     if(i)
       __sync_fetch_and_add(&t->stats.active_threads, 1);
     else
       total_enqueued = t->q->qstats.total_enqueued;
-    spinlock_unlock(&t->lock);
+    spin_pdr_unlock(&t->lock);
 
     if(i) {
       __sync_fetch_and_add(&t->stats.active_threads_sum, t->stats.active_threads);
@@ -68,7 +68,7 @@ int tpool_init(struct tpool *t, int size, struct kqueue *q,
   t->q = q;
   t->func = func;
   t->nprocs = get_nprocs();
-  spinlock_init(&t->lock);
+  spin_pdr_init(&t->lock);
   t->stats.active_threads = 0;
   t->stats.blocked_threads = 0;
   t->stats.active_threads_sum = 0;

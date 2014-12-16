@@ -21,7 +21,7 @@ struct tpool {
   struct kqueue *q;
   int nprocs;
   void (*func)(struct kqueue *, struct kitem *);
-  spinlock_t lock;
+  spin_pdr_lock_t lock;
   struct tpool_stats stats;
   size_t stacksize;
 };

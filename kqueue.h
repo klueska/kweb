@@ -25,11 +25,11 @@ struct kqueue {
   int item_size;
   unsigned long ids;
 
-  spinlock_t lock;
+  spin_pdr_lock_t lock;
   struct __kqueue queue;
   struct kqueue_stats qstats;
 
-  spinlock_t zombie_lock;
+  spin_pdr_lock_t zombie_lock;
   struct __kqueue zombie_queue;
   struct kqueue_stats zombie_qstats;
 };

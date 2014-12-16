@@ -61,7 +61,7 @@ void cpu_util_init(struct cpu_util *c)
   sprintf(proc_stat_file, "/proc/%d/stat", getpid());
   c->proc_stat_fd = open(proc_stat_file, O_RDONLY);
   memset(c->buffer, 0, sizeof(c->buffer));
-  spinlock_init(&c->lock);
+  spin_pdr_init(&c->lock);
   __set_cpu_time(c, &c->initial_stats);
   __set_proc_time(c, &c->initial_stats);
 }
@@ -75,13 +75,13 @@ void cpu_util_fini(struct cpu_util *c)
 struct cpu_util_stats cpu_util_get_stats(struct cpu_util *c)
 {
   struct cpu_util_stats s;
-  spinlock_lock(&c->lock);
+  spin_pdr_lock(&c->lock);
   __set_cpu_time(c, &s);
   __set_proc_time(c, &s);
   s.cpu_time -= c->initial_stats.cpu_time;
   s.proc_user_time -= c->initial_stats.proc_user_time;
   s.proc_sys_time -= c->initial_stats.proc_sys_time;
-  spinlock_unlock(&c->lock);
+  spin_pdr_unlock(&c->lock);
   return s;
 }
 

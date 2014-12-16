@@ -19,7 +19,7 @@ struct cpu_util {
   int stat_fd;
   int proc_stat_fd;
   char buffer[1024];
-  spinlock_t lock;
+  spin_pdr_lock_t lock;
   struct cpu_util_stats initial_stats;
 };
 

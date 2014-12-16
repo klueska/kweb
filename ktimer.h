@@ -8,7 +8,7 @@ struct ktimer {
   unsigned int period_ms;
   void (*callback)(void*);
   void *callback_arg;
-  spinlock_t lock;
+  spin_pdr_lock_t lock;
 };
 
 void ktimer_init(struct ktimer *t, void (*callback)(void*), void* arg);
