@@ -6,6 +6,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/sysinfo.h>
@@ -64,8 +65,13 @@ char *page_data[] = {
 
   "HTTP/1.1 200 OK\r\n"
   "Server: kweb/%s\r\n"
+  "Date: %s\r\n"
+  "Content-Type: %s\r\n"
   "Content-Length: %ld\r\n"
-  "Content-Type: %s\r\n\r\n",
+  "Last-Modified: %s\r\n"
+  "Connection: keep-alive\r\n"
+  "ETag: 54853059-0\r\n"
+  "Accept-Ranges: bytes\r\n\r\n",
 
   "<html><head>\n"
   "<title>Kweb URL Command</title>\n"
@@ -84,6 +90,28 @@ static int listenfd;
 static struct kqueue kqueue;
 static struct cpu_util cpu_util;
 static struct server_stats server_stats = {0};
+
+void setDateString(time_t *timeval, char *buf)
+{
+  static const char *DAY_NAMES[] =
+    { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+  static const char *MONTH_NAMES[] =
+    { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+  time_t __time;
+  time_t *t  = &__time;
+  struct tm tm;
+  if (timeval == NULL)
+    time(t);
+  else
+    t = timeval;
+  gmtime_r(t, &tm);
+
+  strftime(buf, RFC1123_TIME_LEN+1, "---, %d --- %Y %H:%M:%S GMT", &tm);
+  memcpy(buf, DAY_NAMES[tm.tm_wday], 3);
+  memcpy(buf+8, MONTH_NAMES[tm.tm_mon], 3);
+}
 
 static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
@@ -206,11 +234,14 @@ void http_server(struct kqueue *q, struct kitem *__c)
 {
   struct http_connection *c = (struct http_connection *)__c;
   struct http_request r;
+  struct stat statbuf;
   int j, file_fd, buflen;
-  long i = 0, ret = 0, len = 0;
+  long i = 0, ret = 0;
   char *fstr;
   char *request_line;
   char *saveptr;
+  char now[RFC1123_TIME_LEN + 1];
+  char mod[RFC1123_TIME_LEN + 1];
 
   /* Try and extract a request from the connection. */
   ret = extract_request(c, &r);
@@ -270,13 +301,15 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Intercept certain urls and do something special. */
   char *intercept_buf = intercept_url(&request_line[4]);
   if(intercept_buf) {
-	int buflen = strlen(intercept_buf);
+    int buflen = strlen(intercept_buf);
     /* Send the necessary header info + a blank line */
     logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
-    sprintf(r.buf, page_data[OK_HEADER], VERSION, buflen, "text/html");
+    setDateString(NULL, now);
+    setDateString(NULL, mod);
+    sprintf(r.buf, page_data[OK_HEADER], VERSION, now, "text/html", buflen, mod);
     serialized_write(c, r.buf, strlen(r.buf));
     serialized_write(c, intercept_buf, buflen);
-	free(intercept_buf);
+    free(intercept_buf);
     maybe_destroy_connection(q, c);
     return;
   }
@@ -308,7 +341,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   buflen=strlen(request_line);
   fstr = 0;
   for(i=0; extensions[i].ext != 0; i++) {
-    len = strlen(extensions[i].ext);
+    int len = strlen(extensions[i].ext);
     if(!strncmp(&request_line[buflen-len], extensions[i].ext, len)) {
       fstr =extensions[i].filetype;
       break;
@@ -329,15 +362,17 @@ void http_server(struct kqueue *q, struct kitem *__c)
     return;
   }
 
-  /* Get the File length */
-  len = lseek(file_fd, 0, SEEK_END);
-  lseek(file_fd, 0, SEEK_SET);
+  /* Get the File Stats */
+  fstat(file_fd, &statbuf);
 
   /* Prepopulate the request buf with the beginning of the requested file */
   ret = read(file_fd, r.buf, sizeof(r.buf));
 
   /* Prepare the header info + a blank line */
-  sprintf(r.rsp_header, page_data[OK_HEADER], VERSION, len, fstr);
+  setDateString(NULL, now);
+  setDateString(&statbuf.st_mtime, mod);
+  sprintf(r.rsp_header, page_data[OK_HEADER], VERSION, now,
+          fstr, statbuf.st_size, mod); 
   logger(LOG, "Header", r.rsp_header, c->conn.id);
   
   /* Start sending a response */

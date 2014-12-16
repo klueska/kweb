@@ -18,6 +18,8 @@
 #define KWEB_SREAD_TIMEOUT  (1000*30)
 #define KWEB_SWRITE_TIMEOUT      (-1)
 
+#define RFC1123_TIME_LEN 29
+
 enum {
   REQ_NEW,
   REQ_ALIVE

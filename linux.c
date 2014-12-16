@@ -1,4 +1,6 @@
+#define _GNU_SOURCE
 #include <fcntl.h>
+#include <sys/sysinfo.h>
 #include <stdio.h>
 #include "kweb.h"
 #include "tpool.h"
