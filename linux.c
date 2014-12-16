@@ -22,6 +22,23 @@ static int make_socket_non_blocking(int sfd)
   return 0;
 }
 
+static void pin_to_core(int core)
+{
+  cpu_set_t c;
+  CPU_ZERO(&c);
+  CPU_SET(core, &c);
+  sched_setaffinity(0, sizeof(cpu_set_t), &c);
+  sched_yield();
+}
+
+void os_thread_init()
+{
+//  static int next_core = 0;
+//  int n = __sync_fetch_and_add(&next_core, 1);
+//  printf("next_core: %d\n", n % get_nprocs());
+//  pin_to_core(n % get_nprocs());
+}
+
 void init_connection(struct http_connection *c)
 {
 	struct epoll_event event;

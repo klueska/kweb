@@ -141,18 +141,21 @@ char *add_vcores(void *__params) {
 	char *buf = malloc(256);
 	char *bp = buf;
 
-#ifndef __ros__
-	bp += sprintf(bp, "Error: only supported on Akaros");
-
+#if !defined(__ros__) && !defined(WITH_UPTHREAD)
+	bp += sprintf(bp, "Error: only supported on Akaros or Linux Upthread");
 #else
 	if (my_params.num_vcores < -1) {
 		bp += sprintf(bp, "Error: you must specify a query srtring parameter"
 		                  "of \"num_vcores=\" that is > 0");
 	} else {
 		vcore_request(my_params.num_vcores);
-		bp += sprintf(bp, "Success: you now have requests granted or pending"
+		bp += sprintf(bp, "Success: you now have requests granted or pending "
 		                  "for %d vcores.",
+#ifdef __ros__
 		              __procdata.res_req[RES_CORES].amt_wanted);
+#else
+		              (int)num_vcores());
+#endif
 	}
 #endif
 	return buf;

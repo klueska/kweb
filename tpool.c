@@ -11,6 +11,7 @@ static void *__thread_wrapper(void *arg)
   struct kitem *i;
   int total_enqueued = 0;
   struct tpool *t = (struct tpool*)arg;
+  os_thread_init();
 
   while(1) {
     i = NULL;
