@@ -8,6 +8,9 @@
 
 #include <spinlock.h>
 #include <futex.h>
+#include <pthread.h>
+
+typedef struct spin_pdr_lock spin_pdr_lock_t;
 
 static inline long futex_wait(int *addr, int val)
 {
