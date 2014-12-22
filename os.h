@@ -74,6 +74,11 @@ static void os_thread_init()
 #elif defined(WITH_CUSTOM_SCHED) /* linux with custom scheduler */
 #define pthread_yield()
 #define pthread_create(a,b,c,d) 
+
+static void os_app_init()
+{
+}
+
 #endif
 
 #else /* native linux */
