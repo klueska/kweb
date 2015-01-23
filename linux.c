@@ -4,22 +4,22 @@
 #include <stdio.h>
 #include "kweb.h"
 #include "tpool.h"
+#include "kstats.h"
+#include "cpu_util.h"
 
-static int make_socket_non_blocking(int sfd)
+void os_init(void)
 {
-  int flags, s;
-  flags = fcntl (sfd, F_GETFL, 0);
-  if(flags == -1) {
-    perror("fcntl");
-    return -1;
-  }
-  flags |= O_NONBLOCK;
-  s = fcntl (sfd, F_SETFL, flags);
-  if(s == -1) {
-    perror("fcntl");
-    return -1;
-  }
-  return 0;
+  extern struct tpool tpool;
+  extern struct kqueue kqueue;
+  extern struct kstats kstats;
+  extern struct cpu_util cpu_util;
+  extern struct server_stats server_stats;
+  extern int tpool_size;
+
+  kqueue_init(&kqueue, sizeof(struct http_connection));
+  tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
+  cpu_util_init(&cpu_util);
+  kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
 }
 
 static void pin_to_core(int core)
@@ -37,6 +37,23 @@ void os_thread_init()
 //  int n = __sync_fetch_and_add(&next_core, 1);
 //  printf("next_core: %d\n", n % get_nprocs());
 //  pin_to_core(n % get_nprocs());
+}
+
+static int make_socket_non_blocking(int sfd)
+{
+  int flags, s;
+  flags = fcntl (sfd, F_GETFL, 0);
+  if(flags == -1) {
+    perror("fcntl");
+    return -1;
+  }
+  flags |= O_NONBLOCK;
+  s = fcntl (sfd, F_SETFL, flags);
+  if(s == -1) {
+    perror("fcntl");
+    return -1;
+  }
+  return 0;
 }
 
 void init_connection(struct http_connection *c)
@@ -83,4 +100,20 @@ ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
     remaining -= ret;
   }
   return count;
+}
+
+void dispatch_call(int call_fd, void *client_addr)
+{
+  extern struct kqueue kqueue; /* global, kweb.c */
+  struct http_connection *c;
+
+  c = kqueue_create_item(&kqueue);
+  c->burst_length = MAX_BURST;
+  c->ref_count = 0;
+  c->socketfd = call_fd;
+  c->buf_length = 0;
+  mutex_init(&c->writelock);
+  c->should_close = 0;
+  init_connection(c);
+  enqueue_connection_tail(&kqueue, c);
 }

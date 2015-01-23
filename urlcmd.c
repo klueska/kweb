@@ -31,6 +31,7 @@ static struct url_cmd url_cmds[] = {
 	{"start_measurements", start_measurements},
 	{"stop_measurements", stop_measurements},
 	{"add_vcores", add_vcores},
+	{"yield_pcores", yield_pcores},
 	{"terminate", terminate}
 };
 
@@ -145,16 +146,63 @@ char *add_vcores(void *__params) {
 	bp += sprintf(bp, "Error: only supported on Akaros or Linux Upthread");
 #else
 	if (my_params.num_vcores < -1) {
-		bp += sprintf(bp, "Error: you must specify a query srtring parameter"
+		bp += sprintf(bp, "Error: you must specify a query srtring parameter "
 		                  "of \"num_vcores=\" that is > 0");
 	} else {
 		vcore_request(my_params.num_vcores);
 		bp += sprintf(bp, "Success: you now have requests granted or pending "
 		                  "for %d vcores.",
 #ifdef __ros__
-		              __procdata.res_req[RES_CORES].amt_wanted);
+                              __procdata.res_req[RES_CORES].amt_wanted);
 #else
-		              (int)num_vcores());
+                             (int)num_vcores());
+#endif
+	}
+#endif
+	return buf;
+}
+
+char *yield_pcores(void *__params) {
+	int ret;
+	struct {
+		int pcoreid;
+	} my_params = {-1};
+
+	if (__params) {
+		struct query_param *p = (struct query_param*)__params;
+		for (int i=0; i < MAX_PARAMS; i++) {
+			if (p[i].key == NULL)
+				break;
+			else if (!strcmp(p[i].key, "pcoreid"))
+				my_params.pcoreid = atoi(p[i].value);
+		}
+	}
+	char *buf = malloc(256);
+	char *bp = buf;
+
+#if !defined(WITH_CUSTOM_SCHED)
+	bp += sprintf(bp, "Error: only supported on Akaros and Linux with Custom Schedulers");
+
+#else
+	if (my_params.pcoreid < -1) {
+		bp += sprintf(bp, "Error: you must specify a query srtring parameter "
+		                  "of \"pcoreid=\" that is > 0");
+	} else {
+		ret = yield_pcore(my_params.pcoreid);
+		udelay(10000); /* give some time for the yield to kick in, might fail */
+		if (!ret)
+			bp += sprintf(bp, "Success: you now have %d vcores wanted",
+#ifdef __ros__
+			              __procdata.res_req[RES_CORES].amt_wanted);
+#else
+                          (int)num_vcores());
+#endif
+		else
+			bp += sprintf(bp, "Something failed: you have %d vcores wanted",
+#ifdef __ros__
+			              __procdata.res_req[RES_CORES].amt_wanted);
+#else
+                          (int)num_vcores());
 #endif
 	}
 #endif

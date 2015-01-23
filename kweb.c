@@ -12,7 +12,6 @@
 #include <sys/sysinfo.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 #include <signal.h>
 #include <time.h>
 
@@ -86,11 +85,12 @@ void sig_int(int signo);
 void sig_pipe(int signo);
 
 struct tpool tpool;
+struct kqueue kqueue;
 struct kstats kstats;
+struct cpu_util cpu_util;
+struct server_stats server_stats = {0};
+int tpool_size = INT_MAX;
 static int listenfd;
-static struct kqueue kqueue;
-static struct cpu_util cpu_util;
-static struct server_stats server_stats = {0};
 
 void setDateString(time_t *timeval, char *buf)
 {
@@ -118,10 +118,10 @@ static ssize_t serialized_write(struct http_connection *c,
                                 const void *buf, size_t count)
 {
   tpool_inform_blocking(&tpool);
-  pthread_mutex_lock(&c->writelock);
+  mutex_lock(&c->writelock);
   tpool_inform_unblocked(&tpool);
   ssize_t ret = timed_write(c, buf, count);
-  pthread_mutex_unlock(&c->writelock);
+  mutex_unlock(&c->writelock);
   return ret;
 }
 
@@ -186,6 +186,11 @@ static int extract_request(struct http_connection *c,
       c->buf_length = c->buf_length - len;
       memcpy(r->buf, c->buf, r->length);
       memmove(c->buf, &c->buf[r->length], c->buf_length);
+
+      /* Honor some non-persistent clients */
+      if (strstr(r->buf, "Connection: close"))
+        c->should_close = 1;
+
       return len;
     }
 
@@ -203,27 +208,29 @@ static int extract_request(struct http_connection *c,
   }
 }
 
-static void enqueue_connection_tail(struct kqueue *q,
-                                    struct http_connection *c)
+void enqueue_connection_tail(struct kqueue *q, struct http_connection *c)
 {
   __sync_fetch_and_add(&c->ref_count, 1);
   kqueue_enqueue_item_tail(q, &c->conn);
   tpool_wake(&tpool, 1);
 }
 
-static void enqueue_connection_head(struct kqueue *q,
-                                    struct http_connection *c)
+void enqueue_connection_head(struct kqueue *q, struct http_connection *c)
 {
   __sync_fetch_and_add(&c->ref_count, 1);
   kqueue_enqueue_item_head(q, &c->conn);
   tpool_wake(&tpool, 1);
 }
 
-static bool maybe_destroy_connection(struct kqueue *q,
+static void maybe_destroy_connection(struct kqueue *q,
                                      struct http_connection *c)
 {
   int count = __sync_add_and_fetch(&c->ref_count, -1);
   if(count == 0) {
+    /* If we're terminating the session, we should cancel/hangup first.  at this
+     * point in the code, we don't really have that info.  could just blindly
+     * hang-up.  best though is to track in *c whether or not the client closed
+     * it or something. */
     close(c->socketfd);
     destroy_connection(c);
     kqueue_destroy_item(q, &c->conn);
@@ -264,13 +271,15 @@ void http_server(struct kqueue *q, struct kitem *__c)
 
   /* Otherwise, just reenqueue the connection so another thread can grab the
    * next request and start processing it. */
-  if(c->burst_length) {
-    c->burst_length--;
-    enqueue_connection_head(q, c);
-  }
-  else {
-    c->burst_length = MAX_BURST;
-    enqueue_connection_tail(q, c);
+  if (!c->should_close) {
+    if(c->burst_length) {
+      c->burst_length--;
+      enqueue_connection_head(q, c);
+    }
+    else {
+      c->burst_length = MAX_BURST;
+      enqueue_connection_tail(q, c);
+    }
   }
 
   /* Now parse through the extracted request, grabbing only what we care about */
@@ -368,6 +377,12 @@ void http_server(struct kqueue *q, struct kitem *__c)
 
   /* Prepopulate the request buf with the beginning of the requested file */
   ret = read(file_fd, r.buf, sizeof(r.buf));
+  if (ret < 0) {
+    logger(ERROR, "Failed to read file", "...", 0);
+    close(file_fd);
+    maybe_destroy_connection(q, c);
+    return;
+  }
 
   /* Prepare the header info + a blank line */
   setDateString(NULL, now);
@@ -379,7 +394,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Start sending a response */
   logger(LOG, "SEND", &request_line[5], c->conn.id);
   tpool_inform_blocking(&tpool);
-  pthread_mutex_lock(&c->writelock);
+  mutex_lock(&c->writelock);
   tpool_inform_unblocked(&tpool);
   timed_write(c, r.rsp_header, strlen(r.rsp_header));
   /* Send the file itself in 8KB chunks - last block may be smaller */
@@ -387,7 +402,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
     if(timed_write(c, r.buf, ret) < 0)
       logger(LOG, "Write error on socket.", "", c->socketfd);
   } while((ret = read(file_fd, r.buf, sizeof(r.buf))) > 0);
-  pthread_mutex_unlock(&c->writelock);
+  mutex_unlock(&c->writelock);
 
   close(file_fd);
   maybe_destroy_connection(q, c);
@@ -395,7 +410,6 @@ void http_server(struct kqueue *q, struct kitem *__c)
 
 int main(int argc, char **argv)
 {
-  int tpool_size = INT_MAX;
   int port, pid, socketfd;
   socklen_t length;
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
@@ -499,14 +513,8 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  /* Do some os specific app initialization */
-  os_app_init();
-
   /* Initialize necessary data structures */
-  kqueue_init(&kqueue, sizeof(struct http_connection));
-  tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
-  cpu_util_init(&cpu_util);
-  kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
+  os_init();
 
   /* Get the TSC frequency for our timestamp measurements */
   server_stats.tsc_freq = get_tsc_freq();
@@ -523,15 +531,7 @@ int main(int argc, char **argv)
       logger(ERROR, "System call", "accept", 0);
     }
     else {
-      struct http_connection *c;
-      c = kqueue_create_item(&kqueue);
-      c->burst_length = MAX_BURST;
-      c->ref_count = 0;
-      c->socketfd = socketfd;
-      c->buf_length = 0;
-      pthread_mutex_init(&c->writelock, NULL);
-      init_connection(c);
-      enqueue_connection_tail(&kqueue, c);
+        dispatch_call(socketfd, (void*)&cli_addr);
     }
   }
 }

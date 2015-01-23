@@ -2,6 +2,15 @@
 #include <stdio.h>
 #include "kweb.h"
 #include "tpool.h"
+#include "kstats.h"
+
+void os_init(void)
+{
+}
+
+int yield_pcore(int pcoreid)
+{
+}
 
 static int make_socket_non_blocking(int sfd)
 {
@@ -50,6 +59,10 @@ ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
     remaining -= ret;
   }
   return count;
+}
+
+void dispatch_call(int call_fd, void *client_addr)
+{
 }
 
 int tpool_init(struct tpool *t, int size, struct kqueue *q,
@@ -125,6 +138,25 @@ void tpool_print_average_blocked_threads(char *prefix,
 void tpool_print_average_processing_time(char *prefix,
                                          struct tpool_stats *prev,
                                          struct tpool_stats *curr)
+{
+}
+
+void kstats_init(struct kstats *kstats, struct kqueue *kqueue,
+                 struct tpool *tpool, struct cpu_util *cpu_util)
+{
+}
+
+int kstats_start(struct kstats *kstats, unsigned int period_ms)
+{
+    return -1;
+}
+
+int kstats_stop(struct kstats *kstats)
+{
+    return -1;
+}
+
+void kstats_print_lifetime_statistics(struct kstats *kstats)
 {
 }
 

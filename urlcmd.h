@@ -13,6 +13,7 @@ char *intercept_url(char *url);
 char *start_measurements(void *params);
 char *stop_measurements(void *params);
 char *add_vcores(void *params);
+char *yield_pcores(void *params);
 
 char *terminate(void *params);
 
