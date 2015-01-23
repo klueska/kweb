@@ -50,7 +50,7 @@ static void os_app_init()
 {
   upthread_can_vcore_request(false);
   upthread_can_vcore_steal(true);
-  upthread_set_num_vcores(24);
+  upthread_set_num_vcores(32);
 }
 
 static void os_thread_init()
