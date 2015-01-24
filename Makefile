@@ -12,8 +12,8 @@ all:
 	      "make linux," \
 	      "make linux-upthread," \
 	      "make linux-custom-sched," \
-	      "make akaros,"
-	      "or make akaros-custom-sched," \
+	      "make akaros," \
+	      "or make akaros-custom-sched"
 
 linux:
 	gcc -std=gnu99 $(LINUX_NATIVE_FILES) -o kweb -lpthread
@@ -25,8 +25,10 @@ linux-upthread:
 	    -Wl,-wrap,accept
 
 linux-custom-sched:
-	gcc -std=gnu99 $(LINUX_CUSTOM_SCHED_FILES) \
-	    -DWITH_PARLIB -DWITH_CUSTOM_SCHED -o kweb -lparlib
+	gcc -g -std=gnu99 $(LINUX_CUSTOM_SCHED_FILES) \
+	    -DWITH_PARLIB -DWITH_CUSTOM_SCHED -o kweb -lparlib \
+	    -Wl,-wrap,socket \
+	    -Wl,-wrap,accept
 
 akaros:
 	x86_64-ucb-akaros-gcc -std=gnu99 $(AKAROS_FILES) \

@@ -142,8 +142,8 @@ char *add_vcores(void *__params) {
 	char *buf = malloc(256);
 	char *bp = buf;
 
-#if !defined(__ros__) && !defined(WITH_UPTHREAD)
-	bp += sprintf(bp, "Error: only supported on Akaros or Linux Upthread");
+#if !defined(__ros__) && !defined(WITH_PARLIB)
+	bp += sprintf(bp, "Error: only supported on Akaros or Linux With Parlib");
 #else
 	if (my_params.num_vcores < -1) {
 		bp += sprintf(bp, "Error: you must specify a query srtring parameter "
