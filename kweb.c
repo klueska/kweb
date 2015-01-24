@@ -64,13 +64,13 @@ char *page_data[] = {
   "</body></html>\n",
 
   "HTTP/1.1 200 OK\r\n"
-  "Server: kweb/%s\r\n"
+  "Server: kweb/%s  (Nanwan's)\r\n"
   "Date: %s\r\n"
   "Content-Type: %s\r\n"
   "Content-Length: %ld\r\n"
   "Last-Modified: %s\r\n"
   "Connection: keep-alive\r\n"
-  "ETag: 54853059-0\r\n"
+  "ETag: \"54853059-0\"\r\n"
   "Accept-Ranges: bytes\r\n\r\n",
 
   "<html><head>\n"
