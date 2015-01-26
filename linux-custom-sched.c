@@ -556,7 +556,8 @@ void wth_thread_runnable(struct uthread *uthread)
 	struct vc_mgmt *vcm;
 	struct wthread *wthread = (struct wthread*)uthread;
 	/* protect vcm state, could race with event handlers */
-	uth_disable_notifs();
+	if (current_uthread)
+		uth_disable_notifs();
 	cmb();
 	vcm = &vc_mgmt[vcore_id()];
 	/* At this point, the 2LS can see why the thread blocked and was woken up in
@@ -589,7 +590,8 @@ void wth_thread_runnable(struct uthread *uthread)
 			printf("Odd state %d for wthread %p\n", wthread->state, wthread);
 	}
 	vcm->nr_runnables++;
-	uth_enable_notifs();
+	if (current_uthread)
+		uth_enable_notifs();
 	/* TODO: vc control */
 }
 
