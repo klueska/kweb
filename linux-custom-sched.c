@@ -103,7 +103,6 @@ static void wth_blockon_syscall(struct uthread *uthread, void *sysc);
 static void wth_thread_has_blocked(struct uthread *uthread, int flags);
 
 /* Wthread API */
-void wthread_lib_init(void);
 void wthread_exit(void);
 struct wthread *wthread_self(void);
 int __wthread_create(wthread_t *thread, void (*func)(void *, void *),
@@ -144,7 +143,6 @@ void os_init(void)
 	TAILQ_INIT(&gl_zombies);
 	atomic_init(&gl_total_threads, 1);
 
-	wthread_lib_init(); // 1 VC
 	vcore_request(1);	/* one worker vcore, grow by instruction or on demand */
 }
 
@@ -686,7 +684,7 @@ void wth_spawn_thread(uintptr_t pc_start, void *data)
 /******************************************************************************/
 /* Wthread 2LS Helpers and API */
 
-void wthread_lib_init(void)
+static void __attribute__((constructor)) wthread_lib_init(void)
 {
 	vcore_lib_init();
 	vc_mgmt = parlib_aligned_alloc(PGSIZE,
