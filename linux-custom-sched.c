@@ -814,7 +814,7 @@ static void __wth_exit_cb(struct uthread *uthread, void *junk)
 	printd("uth %p exiting\n", uthread);
 	TAILQ_INSERT_HEAD(&vcm->zombies, wthread, next);
 	vcm->nr_zombies++;
-	atomic_decrement(&gl_total_threads);
+	atomic_add(&gl_total_threads, -1);
 }
 
 /* In case we want to clean up */
