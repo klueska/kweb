@@ -181,7 +181,7 @@ struct wthread {
 };
 typedef struct wthread *wthread_t;
 
-#define NEW_CONN_BCQ_SZ 		16
+#define NEW_CONN_BCQ_SZ 		2048
 DEFINE_BCQ_TYPES(new_conn, int, NEW_CONN_BCQ_SZ);
 
 struct vc_mgmt
