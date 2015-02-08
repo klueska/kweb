@@ -634,7 +634,7 @@ static void hyperthreading_hacks(void)
 //
 	/* ugh... */
 	if (vcoreid == 0) {
-		while (__procinfo.vcoremap[vcoreid].pcoreid != 2) {
+		while (__procinfo.vcoremap[vcoreid].pcoreid != 1) {
 			vcore_yield(FALSE);
 			/* hacky yield too, we have no way to guarantee someone else will
 			 * change to us */
@@ -644,13 +644,13 @@ static void hyperthreading_hacks(void)
 		 * enough workers. */
 
 	} else {
-		while (__procinfo.vcoremap[vcoreid].pcoreid == 2) {
+		while (__procinfo.vcoremap[vcoreid].pcoreid == 1) {
 			vcm->accepting_conns = FALSE;
 			/* will not return on success */
 			sys_change_vcore(0, TRUE);
 			cmb();
 		}
-		while (__procinfo.vcoremap[vcoreid].pcoreid % 2 == 1) {
+		while (__procinfo.vcoremap[vcoreid].pcoreid % 2 == 0) {
 			vcm->accepting_conns = FALSE;
 			if (vcm->should_yield) {
 				vcm->should_yield = FALSE;
