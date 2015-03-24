@@ -237,11 +237,11 @@ static void maybe_destroy_connection(struct kqueue *q,
   }
 }
 
-/* This is a child web server thread */
-void http_server(struct kqueue *q, struct kitem *__c)
+/* This is a wrapped version of the child web server thread */
+static void __http_server(struct kqueue *q,
+                          struct http_connection *c,
+                          struct http_request *r)
 {
-  struct http_connection *c = (struct http_connection *)__c;
-  struct http_request r;
   struct stat statbuf;
   int j, file_fd, buflen;
   long i = 0, ret = 0;
@@ -252,7 +252,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   char mod[RFC1123_TIME_LEN + 1];
 
   /* Try and extract a request from the connection. */
-  ret = extract_request(c, &r);
+  ret = extract_request(c, r);
 
   /* If there was an error, just destroy the connection, as there is
    * nothing more we can do with this connection anyway. */
@@ -282,8 +282,8 @@ void http_server(struct kqueue *q, struct kitem *__c)
     }
   }
 
-  /* Now parse through the extracted request, grabbing only what we care about */
-  request_line = strtok_r(r.buf, "\r\n", &saveptr);
+  /* Now parse through the extracted request, grabbing only the first line. */
+  request_line = strtok_r(r->buf, "\r\n", &saveptr);
   if (!request_line) {
     logger(LOG, "Unterminated request buffer.", "", c->conn.id);
     maybe_destroy_connection(q, c);
@@ -316,8 +316,8 @@ void http_server(struct kqueue *q, struct kitem *__c)
     logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
     setDateString(NULL, now);
     setDateString(NULL, mod);
-    sprintf(r.buf, page_data[OK_HEADER], VERSION, now, "text/html", buflen, mod);
-    serialized_write(c, r.buf, strlen(r.buf));
+    sprintf(r->buf, page_data[OK_HEADER], VERSION, now, "text/html", buflen, mod);
+    serialized_write(c, r->buf, strlen(r->buf));
     serialized_write(c, intercept_buf, buflen);
     free(intercept_buf);
     maybe_destroy_connection(q, c);
@@ -376,7 +376,7 @@ void http_server(struct kqueue *q, struct kitem *__c)
   fstat(file_fd, &statbuf);
 
   /* Prepopulate the request buf with the beginning of the requested file */
-  ret = read(file_fd, r.buf, sizeof(r.buf));
+  ret = read(file_fd, r->buf, sizeof(r->buf));
   if (ret < 0) {
     logger(ERROR, "Failed to read file", "...", 0);
     close(file_fd);
@@ -387,25 +387,38 @@ void http_server(struct kqueue *q, struct kitem *__c)
   /* Prepare the header info + a blank line */
   setDateString(NULL, now);
   setDateString(&statbuf.st_mtime, mod);
-  sprintf(r.rsp_header, page_data[OK_HEADER], VERSION, now,
+  sprintf(r->rsp_header, page_data[OK_HEADER], VERSION, now,
           fstr, statbuf.st_size, mod); 
-  logger(LOG, "Header", r.rsp_header, c->conn.id);
+  logger(LOG, "Header", r->rsp_header, c->conn.id);
   
   /* Start sending a response */
   logger(LOG, "SEND", &request_line[5], c->conn.id);
   tpool_inform_blocking(&tpool);
   mutex_lock(&c->writelock);
   tpool_inform_unblocked(&tpool);
-  timed_write(c, r.rsp_header, strlen(r.rsp_header));
+  timed_write(c, r->rsp_header, strlen(r->rsp_header));
   /* Send the file itself in 8KB chunks - last block may be smaller */
   do {
-    if(timed_write(c, r.buf, ret) < 0)
+    if(timed_write(c, r->buf, ret) < 0)
       logger(LOG, "Write error on socket.", "", c->socketfd);
-  } while((ret = read(file_fd, r.buf, sizeof(r.buf))) > 0);
+  } while((ret = read(file_fd, r->buf, sizeof(r->buf))) > 0);
   mutex_unlock(&c->writelock);
 
   close(file_fd);
   maybe_destroy_connection(q, c);
+}
+
+/* This is the child web server thread */
+void http_server(struct kqueue *q, struct kitem *__c)
+{
+  struct http_request r;
+  r.buf = r.static_buf;
+  r.length = 0;
+
+  __http_server(q, (struct http_connection *)__c, &r);
+
+  if (r.buf != r.static_buf)
+    free(r.buf);
 }
 
 int main(int argc, char **argv)

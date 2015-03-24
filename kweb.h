@@ -31,7 +31,8 @@ struct server_stats {
 
 struct http_request {
   char rsp_header[256];
-  char buf[BUFSIZE+1];
+  char static_buf[BUFSIZE+1];
+  char *buf;
   int length;
 };
 
