@@ -33,6 +33,7 @@ struct http_request {
   char rsp_header[256];
   char static_buf[BUFSIZE+1];
   char *buf;
+  int header_length;
   int length;
 };
 

@@ -141,13 +141,12 @@ static int find_crlf(char *buf, int max_len)
   return loc;
 }
 
-static int get_request_length(char *src, int max_len)
+static void parse_request_header(struct http_request *r, char *src, int max_len)
 {
   int i = 0;
   char *curr_line = NULL;
   int curr_line_len = 0;
   int content_length = 0;
-  int request_len = 0;
   while(i < max_len) {
     curr_line = &src[i];
     curr_line_len = find_crlf(curr_line, max_len-i);
@@ -166,10 +165,12 @@ static int get_request_length(char *src, int max_len)
     }
     i += curr_line_len+2;
   }
-  if(i <= 0 || (i+content_length) > max_len)
-    return -1;
-  request_len = i + content_length;
-  return request_len;
+  if(i <= 0 || i > max_len) {
+    r->length = -1;
+  } else  {
+    r->header_length = i;
+    r->length = i + content_length;
+  }
 }
 
 static int extract_request(struct http_connection *c,
@@ -177,15 +178,36 @@ static int extract_request(struct http_connection *c,
 {
   int ret = 0;
   while(1) {
-    /* Find a request in the connection buf */
-    int len = get_request_length(c->buf, c->buf_length);
+    /* Parse a request header from the connection buf. */
+    parse_request_header(r, c->buf, c->buf_length);
     
-    /* If we found one, update some variables and return to process it */
+    /* If we found one, extract the rest of the request based on the length,
+     * and return to process it. */
+	int len = r->length;
     if(len > 0) {
-      r->length = len;
-      c->buf_length = c->buf_length - len;
-      memcpy(r->buf, c->buf, r->length);
-      memmove(c->buf, &c->buf[r->length], c->buf_length);
+      /* Prepare r->buf to receive the extracted request. */
+      if (len > sizeof(r->static_buf))
+        r->buf = malloc(len);
+
+      /* If the length is <= the size of the connection buffer, we can just
+       * copy it out into the request buffer, and we are done. */
+      if (len <= c->buf_length) {
+        memcpy(r->buf, c->buf, len);
+        c->buf_length = c->buf_length - len;
+        memmove(c->buf, &c->buf[len], c->buf_length);
+      /* Otherwise, we need to read in the rest of the request from the wire. */
+      } else {
+        memcpy(r->buf, c->buf, c->buf_length);
+        len -= c->buf_length;
+        c->buf_length = 0;
+        while (len) {
+          ret = timed_read(c, &r->buf[r->length - len], len);
+          len -= ret;
+          if(ret <= 0)
+            return ret;
+        }
+        return r->length;
+      }
 
       /* Honor some non-persistent clients */
       if (strstr(r->buf, "Connection: close"))
