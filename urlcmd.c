@@ -19,13 +19,6 @@ struct url_cmd {
 	char *(*func)(void *arg);
 };
 
-/* Struct representing query parameters */
-struct query_param {
-	char *key;
-	char *value;
-};
-#define MAX_PARAMS 100
-
 /* An array of available commands */
 static struct url_cmd url_cmds[] = {
 	{"start_measurements", start_measurements},
@@ -35,8 +28,21 @@ static struct url_cmd url_cmds[] = {
 	{"terminate", terminate}
 };
 
+/* Find the beginning of the query string, or the end of the url */
+char *find_query_string(char* url) {
+	char *c = url;
+	while(*c != '?' && *c != '\0' && *c != ' ')
+		c++;
+	if(*c == '?')
+		return c+1;
+	return NULL;
+}
+
 /* Parse a query string into an array of (key, value) pairs */
 struct query_param *parse_query_string(char* query) {
+	if (query == NULL)
+		return NULL;
+
 	struct query_param *qps = calloc(MAX_PARAMS, sizeof(struct query_param));
 	char *saveptr;
 	char *token = strtok_r(query, "&", &saveptr);
@@ -62,13 +68,9 @@ char *intercept_url(char *url) {
 		/* If we found a match! */
 		if (strncmp(url, url_cmds[i].name, strlen(url_cmds[i].name)) == 0) {
 			/* Find the beginning of the query string, or the end of the url */
-			char *c = url;
-			while(*c != '?' && *c != '\0' && *c != ' ')
-				c++;
-			/* If we found the beginning of a query string, parse it. */
-			struct query_param *params = NULL;
-			if(*c == '?')
-				params = parse_query_string(c+1);
+			char *c = find_query_string(url);
+			/* Parse the query string into a set of key/value pairs. */
+			struct query_param *params = parse_query_string(c);
 			/* Now run the command, passing it its parameters */
 			char *cmdbuf = url_cmds[i].func(params);
 			size_t cmdbuflen = cmdbuf ? strlen(cmdbuf) : 6; /* (null) */
