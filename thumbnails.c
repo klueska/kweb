@@ -39,10 +39,13 @@ static void *gen_thumbnail(void *arg)
 	epeg_close(input);
 }
 
-void *write_archive(int fd, struct thumbnail_data *td)
+void *write_archive(struct thumbnails_file_data *data, struct thumbnail_data *td)
 {
 	struct archive *a;
 	struct archive_entry *entry;
+	int fd = open(data->filename, O_WRONLY | O_CREAT, 0644);
+	data->stream = NULL;
+	data->size = 0;
 
 	a = archive_write_new();
 	archive_write_add_filter_gzip(a);
@@ -60,6 +63,7 @@ void *write_archive(int fd, struct thumbnail_data *td)
 	}
 	archive_write_close(a);
 	archive_write_free(a);
+	close(fd);
 }
 
 void archive_thumbnails(struct thumbnails_file_data *indata,
@@ -90,12 +94,9 @@ void archive_thumbnails(struct thumbnails_file_data *indata,
 	}
 
 	/* Write out an archive of all the thumbnails to a file. */
-	char *outfilename = malloc(strlen(indata->filename) +
+	outdata->filename = malloc(strlen(indata->filename) +
                                strlen("-thumbnails.tgz") + 1);
-	sprintf(outfilename, "%s-%s", indata->filename, "thumbnails.tgz");
-	int outfd = open(outfilename, O_WRONLY | O_CREAT, 0644);
-	write_archive(outfd, td);
-	free(outfilename);
-	close(outfd);
+	sprintf(outdata->filename, "%s-%s", indata->filename, "thumbnails.tgz");
+	write_archive(outdata, td);
 }
 
