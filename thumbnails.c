@@ -39,18 +39,31 @@ static void *gen_thumbnail(void *arg)
 	epeg_close(input);
 }
 
+static ssize_t archive_memory_write(struct archive *a, void *__data,
+                                    const void *buff, size_t length)
+{
+	struct thumbnails_file_data *data = (struct thumbnails_file_data *)__data;
+	if (data->size == 0) {
+		data->stream = malloc(length);
+	} else {
+		data->stream = realloc(data->stream, data->size + length);
+	}
+	memcpy(&data->stream[data->size], buff, length);
+	data->size += length;
+	return length;
+}
+
 void *write_archive(struct thumbnails_file_data *data, struct thumbnail_data *td)
 {
 	struct archive *a;
 	struct archive_entry *entry;
-	int fd = open(data->filename, O_WRONLY | O_CREAT, 0644);
 	data->stream = NULL;
 	data->size = 0;
 
 	a = archive_write_new();
 	archive_write_add_filter_gzip(a);
 	archive_write_set_format_pax_restricted(a);
-	archive_write_open_fd(a, fd);
+	archive_write_open(a, data, NULL, archive_memory_write, NULL);
 	for (int i = 0; i < num_thumbnails; i++) {
 		entry = archive_entry_new();
 		archive_entry_set_pathname(entry, td[i].filename);
@@ -63,7 +76,6 @@ void *write_archive(struct thumbnails_file_data *data, struct thumbnail_data *td
 	}
 	archive_write_close(a);
 	archive_write_free(a);
-	close(fd);
 }
 
 void archive_thumbnails(struct thumbnails_file_data *indata,

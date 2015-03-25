@@ -3,7 +3,7 @@
 
 struct thumbnails_file_data {
 	char *filename;
-	void *stream;
+	char *stream;
 	size_t size;
 };
 

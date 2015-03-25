@@ -307,15 +307,14 @@ static void __http_server(struct kqueue *q,
   /* Attempt to intercept the request and do something special with it. */
   struct intercept_buf ib;
   if (intercept_request(&ib, r)) {
-    int buflen = ib.buf ? strlen(ib.buf) : 0;
     /* Send the necessary header info + a blank line */
     logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
     setDateString(NULL, now);
     setDateString(NULL, mod);
     sprintf(r->buf, page_data[OK_HEADER], VERSION,
-            now, ib.mime_type, buflen, mod);
+            now, ib.mime_type, ib.size, mod);
     serialized_write(c, r->buf, strlen(r->buf));
-    serialized_write(c, ib.buf, buflen);
+    serialized_write(c, ib.buf, ib.size);
     free(ib.buf);
     maybe_destroy_connection(q, c);
     return;
