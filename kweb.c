@@ -305,12 +305,24 @@ static void __http_server(struct kqueue *q,
   }
 
   /* Attempt to intercept the request and do something special with it. */
-  if (intercept_request(c, r)) {
+  struct intercept_buf ib;
+  if (intercept_request(&ib, r)) {
+    int buflen = ib.buf ? strlen(ib.buf) : 0;
+    /* Send the necessary header info + a blank line */
+    logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
+    setDateString(NULL, now);
+    setDateString(NULL, mod);
+    sprintf(r->buf, page_data[OK_HEADER], VERSION,
+            now, ib.mime_type, buflen, mod);
+    serialized_write(c, r->buf, strlen(r->buf));
+    serialized_write(c, ib.buf, buflen);
+    free(ib.buf);
     maybe_destroy_connection(q, c);
     return;
   }
 
-  /* Now parse through the extracted request, grabbing only the first line. */
+  /* If not intercepted, parse through the extracted request, grabbing only the
+   * first line. */
   request_line = strtok_r(r->buf, "\r\n", &saveptr);
   if (!request_line) {
     logger(LOG, "Unterminated request buffer.", "", c->conn.id);
@@ -326,22 +338,6 @@ static void __http_server(struct kqueue *q,
     return;
   }
   logger(LOG, "Request", request_line, c->conn.id);
-
-  /* Intercept certain urls and do something special. */
-  char *intercept_buf = intercept_url(&request_line[4]);
-  if(intercept_buf) {
-    int buflen = strlen(intercept_buf);
-    /* Send the necessary header info + a blank line */
-    logger(LOG, "INTERCEPT URL", &request_line[4], c->conn.id);
-    setDateString(NULL, now);
-    setDateString(NULL, mod);
-    sprintf(r->buf, page_data[OK_HEADER], VERSION, now, "text/html", buflen, mod);
-    serialized_write(c, r->buf, strlen(r->buf));
-    serialized_write(c, intercept_buf, buflen);
-    free(intercept_buf);
-    maybe_destroy_connection(q, c);
-    return;
-  }
 
   /* Strip the version info from the request_line */
   for(i=4; i<strlen(request_line); i++) {

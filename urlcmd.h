@@ -15,30 +15,36 @@ struct query_params {
 	} p[MAX_PARAMS];
 };
 
-/* Helper functions. */
-/* Need to free result of parse_query_string() when done. */
-struct query_params *parse_query_string(char* request_line);
+struct intercept_buf {
+	void *buf;
+	size_t size;
+	char *mime_type;
+};
 
 /* The top level function that knows how to intercept an entire request and
  * do something special with it. */
-bool intercept_request(struct http_connection *c,
+bool intercept_request(struct intercept_buf *ib,
                        struct http_request *r);
 
-/* Individual requests to intercept. */
-void generate_thumbnails(void *params,
-                         struct http_connection *c,
-                         struct http_request *r);
-
-/* The top level function that knows how to intercept a GET url and run
- * commands.  It returns a buffer of data that should be written back over the
- * connection.  This buffer must be freed by the caller. */
-char *intercept_url(char *url);
 
 /* Individual commands to run */
-char *start_measurements(void *params);
-char *stop_measurements(void *params);
-char *add_vcores(void *params);
-char *yield_pcores(void *params);
-char *terminate(void *params);
+void start_measurements  (struct intercept_buf *ib,
+                          struct query_params *params,
+                          struct http_request *r);
+void stop_measurements   (struct intercept_buf *ib,
+                          struct query_params *params,
+                          struct http_request *r);
+void add_vcores          (struct intercept_buf *ib,
+                          struct query_params *params,
+                          struct http_request *r);
+void yield_pcores        (struct intercept_buf *ib,
+                          struct query_params *params,
+                          struct http_request *r);
+void terminate           (struct intercept_buf *ib,
+                          struct query_params *params,
+                          struct http_request *r);
+void generate_thumbnails (struct intercept_buf *ib,
+                          struct query_params *params,
+                          struct http_request *r);
 
 #endif // URLCMD_H 

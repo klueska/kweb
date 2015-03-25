@@ -20,21 +20,29 @@ extern char *page_data[];
 /* Struct representing the url commands */
 struct url_cmd {
 	char name[256];
-	char *(*func)(void *arg);
+	void (*func)(struct intercept_buf *ib,
+	             struct query_params *params,
+	             struct http_request *r);
+	bool wrapped;
+	char *mime_type;
 };
 
-/* An array of available commands */
-static struct url_cmd url_cmds[] = {
-	{"start_measurements", start_measurements},
-	{"stop_measurements", stop_measurements},
-	{"add_vcores", add_vcores},
-	{"yield_pcores", yield_pcores},
-	{"terminate", terminate}
+/* Arrays of available commands */
+static struct url_cmd get_cmds[] = {
+	{"start_measurements", start_measurements, true, "text/html"},
+	{"stop_measurements",  stop_measurements,  true, "text/html"},
+	{"add_vcores",         add_vcores,         true, "text/html"},
+	{"yield_pcores",       yield_pcores,       true, "text/html"},
+	{"terminate",          terminate,          true, "text/html"}
+};
+static struct url_cmd put_cmds[] = {
+	{"generate_thumbnails", generate_thumbnails, false, "application/x-compressed"},
 };
 
 /* Find the beginning of the query string, or the end of the url */
-static char *find_query_string(char* url) {
-	char *c = url;
+static char *find_query_string(char *request_line)
+{
+	char *c = request_line;
 	while(*c != '?' && *c != '\0' && !(*c == '\r' && *(c+1) == '\n'))
 		c++;
 	if(*c == '?')
@@ -43,8 +51,8 @@ static char *find_query_string(char* url) {
 }
 
 /* Parse a query string into an array of (key, value) pairs */
-struct query_params *parse_query_string(char* request_line) {
-
+static struct query_params *parse_query_string(char* request_line)
+{
 	/* Find the beginning of the query string. */
 	char *query = find_query_string(request_line);
 	if (query == NULL)
@@ -70,19 +78,56 @@ struct query_params *parse_query_string(char* request_line) {
 	return qps;
 }
 
-/* The top level function that knows how to intercept a url and run commands */
-bool intercept_request(struct http_connection *c,
-                       struct http_request *r) {
+static void wrap_results(struct intercept_buf *ib, struct url_cmd *cmd)
+{
+	void *buf = ib->buf;
+	size_t size = buf ? strlen(buf) : 6; /* (null) */
+	ib->buf = malloc(strlen(page_data[URLCMD_PAGE]) +
+	                 strlen(cmd->name) + size + 1);
+	sprintf(ib->buf, page_data[URLCMD_PAGE], cmd->name, buf);
+	free(buf);
+}
 
-	if (!strncmp(r->buf, "PUT", 3) || !strncmp(r->buf, "put", 3)) {
-		char *url = &r->buf[4];
+/* The top level function that knows how to intercept a url and run commands */
+bool intercept_request(struct intercept_buf *ib,
+                       struct http_request *r)
+{
+	char *url = NULL;
+	struct url_cmd *cmd_list;
+	size_t num_cmds;
+
+	if(!strncmp(r->buf, "GET ", 4) && strncmp(r->buf, "get ", 4)) {
+		url = &r->buf[4];
 		if (url[0] == '/')
 			url++;
-		const char *str = "generate_thumbnails";
-		if (!strncmp(url, str, strlen(str))) {
+		cmd_list = &get_cmds[0];
+		num_cmds = sizeof(get_cmds)/sizeof(struct url_cmd);
+	} else if (!strncmp(r->buf, "PUT", 3) || !strncmp(r->buf, "put", 3)) {
+		url = &r->buf[4];
+		if (url[0] == '/')
+			url++;
+		cmd_list = &put_cmds[0];
+		num_cmds = sizeof(put_cmds)/sizeof(struct url_cmd);
+	}
+
+	if (!url)
+		return false;
+
+	/* Loop through known commands and look for a match */
+	for (int i = 0; i < num_cmds; i++) {
+		struct url_cmd *cmd = &cmd_list[i];
+		/* If we found a match! */
+		if (strncmp(url, cmd->name, strlen(cmd->name)) == 0) {
 			/* Parse the query string into a set of key/value pairs. */
-			struct query_params *params = parse_query_string(r->buf);
-            generate_thumbnails(params, c, r);
+			struct query_params *params = parse_query_string(url);
+			/* Now run the command, passing it its parameters */
+			cmd->func(ib, params, r);
+			/* Wrap the results if desired. */
+			if (cmd->wrapped)
+				wrap_results(ib, cmd);
+			/* Set the mime-type. */
+			ib->mime_type = cmd->mime_type;
+			/* Free the params. */
 			free(params);
 			return true;
 		}
@@ -90,90 +135,69 @@ bool intercept_request(struct http_connection *c,
 	return false;
 }
 
-/* The top level function that knows how to intercept a url and run commands */
-char *intercept_url(char *url) {
-	/* Strip off the leading slash if there is one */
-	if (url[0] == '/')
-		url++;
-
-	/* Loop through known commands and look for a match */
-	for (int i=0; i < sizeof(url_cmds)/sizeof(struct url_cmd); i++) {
-		/* If we found a match! */
-		if (strncmp(url, url_cmds[i].name, strlen(url_cmds[i].name)) == 0) {
-			/* Parse the query string into a set of key/value pairs. */
-			struct query_params *params = parse_query_string(url);
-			/* Now run the command, passing it its parameters */
-			char *cmdbuf = url_cmds[i].func(params);
-			size_t cmdbuflen = cmdbuf ? strlen(cmdbuf) : 6; /* (null) */
-			/* And return a buffer with some output */
-			char *buf = malloc(strlen(page_data[URLCMD_PAGE]) +
-			                   strlen(url_cmds[i].name) + 
-			                   cmdbuflen + 1);
-			sprintf(buf, page_data[URLCMD_PAGE], url_cmds[i].name, cmdbuf);
-			free(cmdbuf);
-			free(params);
-			return buf;
-		}
-	}
-	/* No matches */
-	return NULL;
-}
-
-char *start_measurements(void *__params) {
+void start_measurements(struct intercept_buf *ib,
+                        struct query_params *params,
+                        struct http_request *r)
+{
 	struct {
 		unsigned int period_ms;
 		int file_size;
 		int tpool_size;
 	} my_params = {1000, 0, tpool.size};
 
-	if (__params) {
-		struct query_params *qps = (struct query_params *)__params;
+	if (params) {
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (qps->p[i].key == NULL)
+			if (params->p[i].key == NULL)
 				break;
-			else if (!strcmp(qps->p[i].key, "period_ms"))
-				my_params.period_ms = atoi(qps->p[i].value);
-			else if (!strcmp(qps->p[i].key, "file_size"))
-				my_params.file_size = atoi(qps->p[i].value);
-			else if (!strcmp(qps->p[i].key, "tpool_size"))
-				my_params.tpool_size = atoi(qps->p[i].value);
+			else if (!strcmp(params->p[i].key, "period_ms"))
+				my_params.period_ms = atoi(params->p[i].value);
+			else if (!strcmp(params->p[i].key, "file_size"))
+				my_params.file_size = atoi(params->p[i].value);
+			else if (!strcmp(params->p[i].key, "tpool_size"))
+				my_params.tpool_size = atoi(params->p[i].value);
 		}
 	}
 	tpool_resize(&tpool, my_params.tpool_size);
 
-	char *buf = malloc(256);
-	char *bp = buf;
+	ib->buf = malloc(256);
+	char *bp = ib->buf;
 	bp += sprintf(bp, "Starting Measurements<br/>");
 	bp += sprintf(bp, "Interval Length: %u<br/>", my_params.period_ms);
 	bp += sprintf(bp, "Thread Pool Size: %d<br/>", my_params.tpool_size);
 	bp += sprintf(bp, "File Size: %d<br/>", my_params.file_size);
+	ib->size = bp - (char*)ib->buf;
 	kstats_start(&kstats, my_params.period_ms);
-	return buf;
 } 
 
-char *stop_measurements(void *params) {
-	char *buf = malloc(256);
+void stop_measurements(struct intercept_buf *ib,
+                       struct query_params *params,
+                       struct http_request *r)
+{
+	ib->buf = malloc(256);
+	char *bp = ib->buf;
+	bp += sprintf(ib->buf, "Stopped Measurements<br/>");
+	ib->size = bp - (char*)ib->buf;
 	kstats_stop(&kstats);
-	sprintf(buf, "Stopped Measurements<br/>");
-	return buf;
 }
 
-char *add_vcores(void *__params) {
+void add_vcores(struct intercept_buf *ib,
+                struct query_params *params,
+                struct http_request *r)
+{
 	struct {
 		int num_vcores;
 	} my_params = {-1};
 
-	if (__params) {
-		struct query_params *qps = (struct query_params *)__params;
+	if (params) {
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (qps->p[i].key == NULL)
+			if (params->p[i].key == NULL)
 				break;
-			else if (!strcmp(qps->p[i].key, "num_vcores"))
-				my_params.num_vcores = atoi(qps->p[i].value);
+			else if (!strcmp(params->p[i].key, "num_vcores"))
+				my_params.num_vcores = atoi(params->p[i].value);
 		}
 	}
-	char *buf = malloc(256);
-	char *bp = buf;
+	ib->buf = malloc(256);
+	char *bp = ib->buf;
 
 #if !defined(__ros__) && !defined(WITH_PARLIB)
 	bp += sprintf(bp, "Error: only supported on Akaros or Linux With Parlib");
@@ -192,26 +216,28 @@ char *add_vcores(void *__params) {
 #endif
 	}
 #endif
-	return buf;
+	ib->size = bp - (char*)ib->buf;
 }
 
-char *yield_pcores(void *__params) {
+void yield_pcores(struct intercept_buf *ib,
+                  struct query_params *params,
+                  struct http_request *r)
+{
 	int ret;
 	struct {
 		int pcoreid;
 	} my_params = {-1};
 
-	if (__params) {
-		struct query_params *qps = (struct query_params *)__params;
+	if (params) {
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (qps->p[i].key == NULL)
+			if (params->p[i].key == NULL)
 				break;
-			else if (!strcmp(qps->p[i].key, "pcoreid"))
-				my_params.pcoreid = atoi(qps->p[i].value);
+			else if (!strcmp(params->p[i].key, "pcoreid"))
+				my_params.pcoreid = atoi(params->p[i].value);
 		}
 	}
-	char *buf = malloc(256);
-	char *bp = buf;
+	ib->buf = malloc(256);
+	char *bp = ib->buf;
 
 #if !defined(WITH_CUSTOM_SCHED)
 	bp += sprintf(bp, "Error: only supported on Akaros and Linux with Custom Schedulers");
@@ -239,33 +265,34 @@ char *yield_pcores(void *__params) {
 #endif
 	}
 #endif
-	return buf;
+	ib->size = bp - (char*)ib->buf;
 }
 
-void generate_thumbnails(void *__params,
-                         struct http_connection *c,
-                         struct http_request *r) {
-#ifdef __akaros__
-#else
+void terminate(struct intercept_buf *ib,
+               struct query_params *params,
+               struct http_request *r)
+{
+	sig_int(SIGINT);
+}
+
+void generate_thumbnails (struct intercept_buf *ib,
+                          struct query_params *params,
+                          struct http_request *r)
+{
+#ifndef __akaros__
 	struct thumbnails_file_data indata, outdata;
 
-	if (__params) {
-		struct query_params *qps = (struct query_params *)__params;
+	if (params) {
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (qps->p[i].key == NULL)
+			if (params->p[i].key == NULL)
 				break;
-			else if (!strcmp(qps->p[i].key, "file"))
-				indata.filename = qps->p[i].value;
+			else if (!strcmp(params->p[i].key, "file"))
+				indata.filename = params->p[i].value;
 		}
 	}
 	indata.stream = &r->buf[r->header_length];
 	indata.size = r->length - r->header_length;
 	archive_thumbnails(&indata, &outdata);
 #endif
-}
-
-char *terminate(void *params) {
-	sig_int(SIGINT);
-	return NULL;
 }
 
