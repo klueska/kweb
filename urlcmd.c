@@ -29,9 +29,9 @@ static struct url_cmd url_cmds[] = {
 };
 
 /* Find the beginning of the query string, or the end of the url */
-char *find_query_string(char* url) {
+static char *find_query_string(char* url) {
 	char *c = url;
-	while(*c != '?' && *c != '\0' && *c != ' ')
+	while(*c != '?' && *c != '\0' && !(*c == '\r' && *(c+1) == '\n'))
 		c++;
 	if(*c == '?')
 		return c+1;
@@ -39,18 +39,27 @@ char *find_query_string(char* url) {
 }
 
 /* Parse a query string into an array of (key, value) pairs */
-struct query_param *parse_query_string(char* query) {
+struct query_params *parse_query_string(char* request_line) {
+
+	/* Find the beginning of the query string. */
+	char *query = find_query_string(request_line);
 	if (query == NULL)
 		return NULL;
 
-	struct query_param *qps = calloc(MAX_PARAMS, sizeof(struct query_param));
+	/* Find the space at the end of the query string. */
+	char *c = strstr(query, " ");
+	if ((int)(c - query) > BUFSIZE)
+		return NULL;
+
+	struct query_params *qps = calloc(1, sizeof(struct query_params));
+	strncpy(qps->src, query, (int)(c - query));
 	char *saveptr;
-	char *token = strtok_r(query, "&", &saveptr);
+	char *token = strtok_r(qps->src, "&", &saveptr);
 	int i = 0;
 	while (token != NULL) {
 		char *saveptr2;
-		qps[i].key = strtok_r(token, "=", &saveptr2);
-		qps[i].value = strtok_r(NULL, "=", &saveptr2);
+		qps->p[i].key = strtok_r(token, "=", &saveptr2);
+		qps->p[i].value = strtok_r(NULL, "=", &saveptr2);
 		token = strtok_r(NULL, "&", &saveptr);
 		i++;
 	}
@@ -67,10 +76,8 @@ char *intercept_url(char *url) {
 	for (int i=0; i < sizeof(url_cmds)/sizeof(struct url_cmd); i++) {
 		/* If we found a match! */
 		if (strncmp(url, url_cmds[i].name, strlen(url_cmds[i].name)) == 0) {
-			/* Find the beginning of the query string, or the end of the url */
-			char *c = find_query_string(url);
 			/* Parse the query string into a set of key/value pairs. */
-			struct query_param *params = parse_query_string(c);
+			struct query_params *params = parse_query_string(url);
 			/* Now run the command, passing it its parameters */
 			char *cmdbuf = url_cmds[i].func(params);
 			size_t cmdbuflen = cmdbuf ? strlen(cmdbuf) : 6; /* (null) */
@@ -96,16 +103,16 @@ char *start_measurements(void *__params) {
 	} my_params = {1000, 0, tpool.size};
 
 	if (__params) {
-		struct query_param *p = (struct query_param*)__params;
+		struct query_params *qps = (struct query_params *)__params;
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (p[i].key == NULL)
+			if (qps->p[i].key == NULL)
 				break;
-			else if (!strcmp(p[i].key, "period_ms"))
-				my_params.period_ms = atoi(p[i].value);
-			else if (!strcmp(p[i].key, "file_size"))
-				my_params.file_size = atoi(p[i].value);
-			else if (!strcmp(p[i].key, "tpool_size"))
-				my_params.tpool_size = atoi(p[i].value);
+			else if (!strcmp(qps->p[i].key, "period_ms"))
+				my_params.period_ms = atoi(qps->p[i].value);
+			else if (!strcmp(qps->p[i].key, "file_size"))
+				my_params.file_size = atoi(qps->p[i].value);
+			else if (!strcmp(qps->p[i].key, "tpool_size"))
+				my_params.tpool_size = atoi(qps->p[i].value);
 		}
 	}
 	tpool_resize(&tpool, my_params.tpool_size);
@@ -133,12 +140,12 @@ char *add_vcores(void *__params) {
 	} my_params = {-1};
 
 	if (__params) {
-		struct query_param *p = (struct query_param*)__params;
+		struct query_params *qps = (struct query_params *)__params;
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (p[i].key == NULL)
+			if (qps->p[i].key == NULL)
 				break;
-			else if (!strcmp(p[i].key, "num_vcores"))
-				my_params.num_vcores = atoi(p[i].value);
+			else if (!strcmp(qps->p[i].key, "num_vcores"))
+				my_params.num_vcores = atoi(qps->p[i].value);
 		}
 	}
 	char *buf = malloc(256);
@@ -171,12 +178,12 @@ char *yield_pcores(void *__params) {
 	} my_params = {-1};
 
 	if (__params) {
-		struct query_param *p = (struct query_param*)__params;
+		struct query_params *qps = (struct query_params *)__params;
 		for (int i=0; i < MAX_PARAMS; i++) {
-			if (p[i].key == NULL)
+			if (qps->p[i].key == NULL)
 				break;
-			else if (!strcmp(p[i].key, "pcoreid"))
-				my_params.pcoreid = atoi(p[i].value);
+			else if (!strcmp(qps->p[i].key, "pcoreid"))
+				my_params.pcoreid = atoi(qps->p[i].value);
 		}
 	}
 	char *buf = malloc(256);

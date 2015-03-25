@@ -321,15 +321,6 @@ static void __http_server(struct kqueue *q,
   }
   logger(LOG, "Request", request_line, c->conn.id);
 
-  /* Strip the version info from the request_line */
-  for(i=4; i<strlen(request_line); i++) {
-    /* String is "GET URL?<query_data> HTTP_VERSION" */
-    if(request_line[i] == ' ') {
-      request_line[i] = '\0';
-      break;
-    }
-  }
-
   /* Intercept certain urls and do something special. */
   char *intercept_buf = intercept_url(&request_line[4]);
   if(intercept_buf) {
@@ -344,6 +335,15 @@ static void __http_server(struct kqueue *q,
     free(intercept_buf);
     maybe_destroy_connection(q, c);
     return;
+  }
+
+  /* Strip the version info from the request_line */
+  for(i=4; i<strlen(request_line); i++) {
+    /* String is "GET URL?<query_data> HTTP_VERSION" */
+    if(request_line[i] == ' ') {
+      request_line[i] = '\0';
+      break;
+    }
   }
 
   /* Strip all query data from the request_line */
