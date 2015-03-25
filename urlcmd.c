@@ -3,9 +3,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "urlcmd.h"
 #include "kstats.h"
 #include "kweb.h"
+#include "thumbnails.h"
 
 /* Extern in some global variables for the url commands */
 extern struct tpool tpool;
@@ -64,6 +68,26 @@ struct query_params *parse_query_string(char* request_line) {
 		i++;
 	}
 	return qps;
+}
+
+/* The top level function that knows how to intercept a url and run commands */
+bool intercept_request(struct http_connection *c,
+                       struct http_request *r) {
+
+	if (!strncmp(r->buf, "PUT", 3) || !strncmp(r->buf, "put", 3)) {
+		char *url = &r->buf[4];
+		if (url[0] == '/')
+			url++;
+		const char *str = "generate_thumbnails";
+		if (!strncmp(url, str, strlen(str))) {
+			/* Parse the query string into a set of key/value pairs. */
+			struct query_params *params = parse_query_string(r->buf);
+            generate_thumbnails(params, c, r);
+			free(params);
+			return true;
+		}
+	}
+	return false;
 }
 
 /* The top level function that knows how to intercept a url and run commands */
@@ -216,6 +240,28 @@ char *yield_pcores(void *__params) {
 	}
 #endif
 	return buf;
+}
+
+void generate_thumbnails(void *__params,
+                         struct http_connection *c,
+                         struct http_request *r) {
+#ifdef __akaros__
+#else
+	struct thumbnails_file_data indata, outdata;
+
+	if (__params) {
+		struct query_params *qps = (struct query_params *)__params;
+		for (int i=0; i < MAX_PARAMS; i++) {
+			if (qps->p[i].key == NULL)
+				break;
+			else if (!strcmp(qps->p[i].key, "file"))
+				indata.filename = qps->p[i].value;
+		}
+	}
+	indata.stream = &r->buf[r->header_length];
+	indata.size = r->length - r->header_length;
+	archive_thumbnails(&indata, &outdata);
+#endif
 }
 
 char *terminate(void *params) {

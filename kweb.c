@@ -304,6 +304,12 @@ static void __http_server(struct kqueue *q,
     }
   }
 
+  /* Attempt to intercept the request and do something special with it. */
+  if (intercept_request(c, r)) {
+    maybe_destroy_connection(q, c);
+    return;
+  }
+
   /* Now parse through the extracted request, grabbing only the first line. */
   request_line = strtok_r(r->buf, "\r\n", &saveptr);
   if (!request_line) {

@@ -1,9 +1,11 @@
 COMMON_FILES = kweb.c kqueue.c cpu_util.c urlcmd.c
 NON_CUSTOM_SCHED_FILES = $(COMMON_FILES) tpool.c kstats.c ktimer.c 
+LINUX_FILES = thumbnails.c
+LINUX_LIBS = -lepeg -larchive
 
-LINUX_NATIVE_FILES = linux.c $(NON_CUSTOM_SCHED_FILES)
-LINUX_UPTHREAD_FILES = linux-upthread.c $(NON_CUSTOM_SCHED_FILES)
-LINUX_CUSTOM_SCHED_FILES = linux-custom-sched.c $(COMMON_FILES)
+LINUX_NATIVE_FILES = linux.c $(LINUX_FILES) $(NON_CUSTOM_SCHED_FILES)
+LINUX_UPTHREAD_FILES = linux-upthread.c $(LINUX_FILES) $(NON_CUSTOM_SCHED_FILES)
+LINUX_CUSTOM_SCHED_FILES = linux-custom-sched.c $(LINUX_FILES) $(COMMON_FILES)
 AKAROS_FILES = akaros.c $(NON_CUSTOM_SCHED_FILES)
 AKAROS_CUSTOM_SCHED_FILES = akaros-custom-sched.c $(COMMON_FILES)
 
@@ -16,17 +18,20 @@ all:
 	      "or make akaros-custom-sched"
 
 linux:
-	gcc -std=gnu99 $(LINUX_NATIVE_FILES) -o kweb -lpthread
+	gcc -std=gnu99 $(LINUX_NATIVE_FILES) -o kweb $(LINUX_LIBS) -lpthread
 
 linux-upthread:
 	gcc -g -std=gnu99 $(LINUX_UPTHREAD_FILES) \
-	    -DWITH_PARLIB -DWITH_UPTHREAD -o kweb -lupthread -lparlib \
+	    -I/usr/include/upthread/compatibility \
+	    -DWITH_PARLIB -DWITH_UPTHREAD -o kweb \
+	    $(LINUX_LIBS) -lupthread -lparlib \
 	    -Wl,-wrap,socket \
 	    -Wl,-wrap,accept
 
 linux-custom-sched:
 	gcc -g -std=gnu99 $(LINUX_CUSTOM_SCHED_FILES) \
-	    -DWITH_PARLIB -DWITH_CUSTOM_SCHED -o kweb -lparlib \
+	    -DWITH_PARLIB -DWITH_CUSTOM_SCHED -o kweb \
+	    $(LINUX_LIBS) -lparlib \
 	    -Wl,-wrap,socket \
 	    -Wl,-wrap,accept
 
