@@ -85,6 +85,7 @@ static void wrap_results(struct intercept_buf *ib, struct url_cmd *cmd)
 	ib->buf = malloc(strlen(page_data[URLCMD_PAGE]) +
 	                 strlen(cmd->name) + size + 1);
 	sprintf(ib->buf, page_data[URLCMD_PAGE], cmd->name, buf);
+	ib->size = strlen(ib->buf);
 	free(buf);
 }
 
