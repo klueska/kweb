@@ -103,7 +103,7 @@ bool intercept_request(struct intercept_buf *ib,
 			url++;
 		cmd_list = &get_cmds[0];
 		num_cmds = sizeof(get_cmds)/sizeof(struct url_cmd);
-	} else if (!strncmp(r->buf, "PUT", 3) || !strncmp(r->buf, "put", 3)) {
+	} else if (!strncmp(r->buf, "PUT ", 4) || !strncmp(r->buf, "put ", 4)) {
 		url = &r->buf[4];
 		if (url[0] == '/')
 			url++;
