@@ -282,7 +282,9 @@ void generate_thumbnails (struct intercept_buf *ib,
 {
 #ifndef __akaros__
 	struct thumbnails_file_data indata, outdata;
+	char *default_filename = "";
 
+	indata.filename = NULL;
 	if (params) {
 		for (int i=0; i < MAX_PARAMS; i++) {
 			if (params->p[i].key == NULL)
@@ -291,6 +293,8 @@ void generate_thumbnails (struct intercept_buf *ib,
 				indata.filename = params->p[i].value;
 		}
 	}
+	if (indata.filename == NULL)
+		indata.filename = default_filename;
 	indata.stream = &r->buf[r->header_length];
 	indata.size = r->length - r->header_length;
 	archive_thumbnails(&indata, &outdata);
