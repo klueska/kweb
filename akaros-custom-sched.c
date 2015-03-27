@@ -287,27 +287,32 @@ ssize_t timed_read(struct http_connection *c, void *buf, size_t count)
 	return ret;
 }
 
-ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
+ssize_t timed_write(struct http_connection *c, const char *buf, size_t count)
 {
-	ssize_t ret;
+	ssize_t ret = 0;
+	int remaining = count;
 	struct alarm_waiter waiter;
 
-	init_awaiter(&waiter, alarm_abort_sysc);
-	waiter.data = current_uthread;
+	while(remaining > 0) {
+		#ifdef ALARM
+		init_awaiter(&waiter, alarm_abort_sysc);
+		waiter.data = current_uthread;
+		set_awaiter_rel(&waiter, KWEB_SREAD_TIMEOUT * 1000);
+		set_alarm(&waiter);
+		#endif
 
-	set_awaiter_rel(&waiter, KWEB_SREAD_TIMEOUT * 1000);
-	#ifdef ALARM
-	set_alarm(&waiter);
-	#endif
+		tpool_inform_blocking(&tpool);
+		ret = write(c->socketfd, &buf[count-remaining], remaining);
+		tpool_inform_unblocked(&tpool);
 
-	tpool_inform_blocking(&tpool);
-	ret = write(c->socketfd, buf, count);
-	tpool_inform_unblocked(&tpool);
-
-	#ifdef ALARM
-	unset_alarm(&waiter);
-	#endif
-	return ret;
+		#ifdef ALARM
+		unset_alarm(&waiter);
+		#endif
+		if(ret < 0)
+			return ret;
+		remaining -= ret;
+	}
+	return count;
 }
 
 static int get_next_vc(int i)

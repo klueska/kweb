@@ -51,7 +51,6 @@ ssize_t timed_read(struct http_connection *c, void *buf, size_t count)
 
 	init_awaiter(&waiter, alarm_abort_sysc);
 	waiter.data = current_uthread;
-
 	set_awaiter_rel(&waiter, KWEB_SREAD_TIMEOUT * 1000);
 	set_alarm(&waiter);
 
@@ -63,23 +62,27 @@ ssize_t timed_read(struct http_connection *c, void *buf, size_t count)
 	return ret;
 }
 
-ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
+ssize_t timed_write(struct http_connection *c, const char *buf, size_t count)
 {
-	ssize_t ret;
+	ssize_t ret = 0;
+	int remaining = count;
 	struct alarm_waiter waiter;
 
-	init_awaiter(&waiter, alarm_abort_sysc);
-	waiter.data = current_uthread;
+	while(remaining > 0) {
+		init_awaiter(&waiter, alarm_abort_sysc);
+		waiter.data = current_uthread;
+		set_awaiter_rel(&waiter, KWEB_SREAD_TIMEOUT * 1000);
+		set_alarm(&waiter);
 
-	set_awaiter_rel(&waiter, KWEB_SREAD_TIMEOUT * 1000);
-	set_alarm(&waiter);
-
-	tpool_inform_blocking(&tpool);
-	ret = write(c->socketfd, buf, count);
-	tpool_inform_unblocked(&tpool);
-
-	unset_alarm(&waiter);
-	return ret;
+		tpool_inform_blocking(&tpool);
+		ret = write(c->socketfd, &buf[count-remaining], remaining);
+		tpool_inform_unblocked(&tpool);
+		unset_alarm(&waiter);
+		if(ret < 0)
+			return ret;
+		remaining -= ret;
+  }
+  return count;
 }
 
 void dispatch_call(int call_fd, void *client_addr)
