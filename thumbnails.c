@@ -9,31 +9,57 @@
 #include <errno.h>
 #include <pthread.h>
 #include <Epeg.h>
+#include <assert.h>
 #include "thumbnails.h"
 
-#define num_thumbnails (sizeof(sizes)/sizeof(sizes[0]))
-static const int quality = 100;
-static const int sizes[] = { 75, 100, 125, 150, 200, 400, 600 };
+struct thumbnail_props {
+	int size;
+	int type;	
+	int quality;
+};
+
+#define THUMBNAIL_SQUARE 1
+#define THUMBNAIL_SCALED 2
+#define num_thumbnails (sizeof(thumbnail_props)/sizeof(thumbnail_props[0]))
+static struct thumbnail_props thumbnail_props[] = {
+	{ 75,   THUMBNAIL_SQUARE, 100 },
+	{ 150,  THUMBNAIL_SQUARE, 100 },
+	{ 100,  THUMBNAIL_SCALED, 100 },
+	{ 320,  THUMBNAIL_SCALED, 100 },
+	{ 500,  THUMBNAIL_SCALED, 100 },
+	{ 800,  THUMBNAIL_SCALED, 100 },
+	{ 1024, THUMBNAIL_SCALED, 100 },
+	{ 1600, THUMBNAIL_SCALED, 100 },
+	{ 2048, THUMBNAIL_SCALED, 100 }
+};
 
 struct thumbnail_data {
-	char *infilebase;
+	char *inbasename;
 	unsigned char *instream;
 	int insize;
 	unsigned char *outstream;
 	int outsize;
-	int w;
-	int h;
-	int quality;
-	char filename[256];
+	struct thumbnail_props *props;
+	char outname[256];
 };
+
+static void get_thumbnail_dims(Epeg_Image *input,
+                               struct thumbnail_props *props,
+                               int *w, int *h)
+{
+	*w = props->size;
+	*h = props->size;
+}
 
 static void *gen_thumbnail(void *arg)
 {
+	int w, h;
 	struct thumbnail_data *td = (struct thumbnail_data*)arg;
-	sprintf(td->filename, "%s-%dx%d.jpg", td->infilebase, td->w, td->h);
 	Epeg_Image *input = epeg_memory_open(td->instream, td->insize);
-	epeg_decode_size_set(input, td->w, td->h);
-	epeg_quality_set(input, td->quality);
+	get_thumbnail_dims(input, td->props, &w, &h);
+	sprintf(td->outname, "%s-%dx%d.jpg", td->inbasename, w, h);
+	epeg_decode_size_set(input, w, h);
+	epeg_quality_set(input, td->props->quality);
 	epeg_memory_output_set(input, &td->outstream, &td->outsize);
 	epeg_encode(input);
 	epeg_close(input);
@@ -53,26 +79,33 @@ static ssize_t archive_memory_write(struct archive *a, void *__data,
 	return length;
 }
 
-void *write_archive(struct thumbnails_file_data *data, struct thumbnail_data *td)
+static void write_entry(struct archive *a, char *name, char *stream, size_t size)
+{
+	struct archive_entry *entry = archive_entry_new();
+	archive_entry_set_pathname(entry, name);
+	archive_entry_set_size(entry, size);
+	archive_entry_set_filetype(entry, AE_IFREG);
+	archive_entry_set_perm(entry, 0644);
+	archive_write_header(a, entry);
+	archive_write_data(a, stream, size);
+	archive_entry_free(entry);
+}
+
+void *write_archive(struct thumbnails_file_data *indata,
+                    struct thumbnails_file_data *outdata,
+                    struct thumbnail_data *td)
 {
 	struct archive *a;
-	struct archive_entry *entry;
-	data->stream = NULL;
-	data->size = 0;
+	outdata->stream = NULL;
+	outdata->size = 0;
 
 	a = archive_write_new();
 	archive_write_add_filter_gzip(a);
 	archive_write_set_format_pax_restricted(a);
-	archive_write_open(a, data, NULL, archive_memory_write, NULL);
+	archive_write_open(a, outdata, NULL, archive_memory_write, NULL);
+	write_entry(a, indata->filename, indata->stream, indata->size);
 	for (int i = 0; i < num_thumbnails; i++) {
-		entry = archive_entry_new();
-		archive_entry_set_pathname(entry, td[i].filename);
-		archive_entry_set_size(entry, td[i].outsize);
-		archive_entry_set_filetype(entry, AE_IFREG);
-		archive_entry_set_perm(entry, 0644);
-		archive_write_header(a, entry);
-		archive_write_data(a, td[i].outstream, td[i].outsize);
-		archive_entry_free(entry);
+		write_entry(a, td[i].outname, td[i].outstream, td[i].outsize);
 	}
 	archive_write_close(a);
 	archive_write_free(a);
@@ -84,21 +117,26 @@ void archive_thumbnails(struct thumbnails_file_data *indata,
 	struct thumbnail_data td[num_thumbnails];
 	pthread_t threads[num_thumbnails];
 
-	/* Truncate the extension from the intpufilename to get the base name. */
+	/* Create new string to hold the basefilename from the intpufilename. */
+	int len = 0;
+	char *inbasename = NULL;
 	char *dotindex = rindex(indata->filename, '.');
 	if (dotindex != NULL)
-		*dotindex = '\0';
+		len = dotindex - indata->filename;
+	else
+		len = strlen(indata->filename);
+	inbasename = malloc(len + 1);
+	memcpy(inbasename, indata->filename, len);
+	inbasename[len] = '\0';
 
 	/* Create the thumbnails. */
 	for (int i = 0; i < num_thumbnails; i++) {
-		td[i].infilebase = indata->filename;
+		td[i].inbasename = inbasename;
 		td[i].instream = indata->stream;
 		td[i].insize = indata->size;
 		td[i].outstream = NULL;
 		td[i].outsize = 0;
-		td[i].w = sizes[i];
-		td[i].h = sizes[i];
-		td[i].quality = quality;
+		td[i].props = &thumbnail_props[i];
 		pthread_create(&threads[i], NULL, gen_thumbnail, &td[i]);
 	}
 	for (int i = 0; i < num_thumbnails; i++) {
@@ -106,9 +144,12 @@ void archive_thumbnails(struct thumbnails_file_data *indata,
 	}
 
 	/* Write out an archive of all the thumbnails to a file. */
-	outdata->filename = malloc(strlen(indata->filename) +
+	outdata->filename = malloc(strlen(inbasename) +
                                strlen("-thumbnails.tgz") + 1);
-	sprintf(outdata->filename, "%s-%s", indata->filename, "thumbnails.tgz");
-	write_archive(outdata, td);
+	sprintf(outdata->filename, "%s-%s", inbasename, "thumbnails.tgz");
+	write_archive(indata, outdata, td);
+
+	/* Free the basefilname. */
+	free(inbasename);
 }
 
