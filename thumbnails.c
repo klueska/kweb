@@ -47,8 +47,28 @@ static void get_thumbnail_dims(Epeg_Image *input,
                                struct thumbnail_props *props,
                                int *w, int *h)
 {
-	*w = props->size;
-	*h = props->size;
+	switch (props->type) {
+		case THUMBNAIL_SQUARE:
+			*w = props->size;
+			*h = props->size;
+			break;
+		case THUMBNAIL_SCALED:
+			epeg_size_get(input, w, h);
+			if (*w > *h) {
+				*h = (props->size * (*h))/(*w);
+				*w = props->size;
+			} else if (*h > *w) {
+				*w = (props->size * (*w))/(*h);
+				*h = props->size;
+			} else {
+				*w = props->size;
+				*h = props->size;
+			}
+			break;
+		default:
+			fprintf(stderr, "Incorrect thumbnail type!\n");
+			abort();
+	}
 }
 
 static void *gen_thumbnail(void *arg)
