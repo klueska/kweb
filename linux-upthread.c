@@ -64,13 +64,14 @@ ssize_t timed_read(struct http_connection *c, void *buf, size_t count)
   return ret;
 }
 
-ssize_t timed_write(struct http_connection *c, const void *buf, size_t count)
+ssize_t timed_write(struct http_connection *c, const char *buf, size_t count)
 {
   int ret = 0;
   int remaining = count;
   while(remaining > 0) {
     tpool_inform_blocking(&tpool);
-    ret = write(c->socketfd, buf, remaining);
+    set_syscall_timeout(KWEB_SREAD_TIMEOUT * 1000);
+    ret = write(c->socketfd, &buf[count-remaining], remaining);
     tpool_inform_unblocked(&tpool);
     if(ret < 0)
       return ret;

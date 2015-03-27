@@ -69,7 +69,7 @@ void http_server(struct kqueue *q, struct kitem *__c);
 void init_connection(struct http_connection *c);
 void destroy_connection(struct http_connection *c);
 ssize_t timed_read(struct http_connection *c, void *buf, size_t count);
-ssize_t timed_write(struct http_connection *c, const void *buf, size_t count);
+ssize_t timed_write(struct http_connection *c, const char *buf, size_t count);
 void dispatch_call(int call_fd, void *client_addr);
 
 #ifndef DEBUG
