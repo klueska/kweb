@@ -15,14 +15,14 @@ void os_init()
   extern struct server_stats server_stats;
   extern int tpool_size;
 
+  upthread_can_vcore_request(false);
+  upthread_can_vcore_steal(true);
+  upthread_set_num_vcores(32);
+
   kqueue_init(&kqueue, sizeof(struct http_connection));
   tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
   cpu_util_init(&cpu_util);
   kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
-
-  upthread_can_vcore_request(false);
-  upthread_can_vcore_steal(true);
-  upthread_set_num_vcores(32);
 }
 
 void os_thread_init()
