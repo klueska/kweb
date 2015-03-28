@@ -89,10 +89,12 @@ static ssize_t archive_memory_write(struct archive *a, void *__data,
                                     const void *buff, size_t length)
 {
 	struct thumbnails_file_data *data = (struct thumbnails_file_data *)__data;
-	if (data->size == 0) {
-		data->stream = malloc(length);
-	} else {
-		data->stream = realloc(data->stream, data->size + length);
+	if (data->capacity == 0) {
+		data->capacity = length;
+		data->stream = malloc(data->capacity);
+	} else if (data->size + length > data->capacity) {
+		data->capacity *= 2;
+		data->stream = realloc(data->stream, data->capacity);
 	}
 	memcpy(&data->stream[data->size], buff, length);
 	data->size += length;
@@ -118,6 +120,7 @@ void *write_archive(struct thumbnails_file_data *indata,
 	struct archive *a;
 	outdata->stream = NULL;
 	outdata->size = 0;
+	outdata->capacity = 0;
 
 	a = archive_write_new();
 	archive_write_add_filter_gzip(a);

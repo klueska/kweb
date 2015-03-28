@@ -297,6 +297,7 @@ void generate_thumbnails (struct intercept_buf *ib,
 		indata.filename = default_filename;
 	indata.stream = &r->buf[r->header_length];
 	indata.size = r->length - r->header_length;
+	indata.capacity = indata.size;
 	archive_thumbnails(&indata, &outdata);
 	free(outdata.filename);
 	ib->buf = outdata.stream;
