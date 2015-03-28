@@ -126,6 +126,7 @@ void *write_archive(struct thumbnails_file_data *indata,
 	write_entry(a, indata->filename, indata->stream, indata->size);
 	for (int i = 0; i < num_thumbnails; i++) {
 		write_entry(a, td[i].outname, td[i].outstream, td[i].outsize);
+		free(td[i].outstream);
 	}
 	archive_write_close(a);
 	archive_write_free(a);
