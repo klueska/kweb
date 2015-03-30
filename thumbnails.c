@@ -19,7 +19,7 @@
 
 struct thumbnail_props {
 	int size;
-	int type;	
+	int type;
 	int quality;
 };
 
@@ -48,26 +48,25 @@ struct thumbnail_data {
 	char outname[256];
 };
 
-static void get_thumbnail_dims(Epeg_Image *input,
-                               struct thumbnail_props *props,
-                               int *w, int *h)
+static void get_thumbnail_dims(struct thumbnail_props *props,
+                               int inw, int inh,
+                               int *outw, int *outh)
 {
 	switch (props->type) {
 		case THUMBNAIL_SQUARE:
-			*w = props->size;
-			*h = props->size;
+			*outw = props->size;
+			*outh = props->size;
 			break;
 		case THUMBNAIL_SCALED:
-			epeg_size_get(input, w, h);
-			if (*w > *h) {
-				*h = (props->size * (*h))/(*w);
-				*w = props->size;
-			} else if (*h > *w) {
-				*w = (props->size * (*w))/(*h);
-				*h = props->size;
+			if (inw > inh) {
+				*outh = (props->size * inh)/inw;
+				*outw = props->size;
+			} else if (inh > inw) {
+				*outw = (props->size * inw)/inh;
+				*outh = props->size;
 			} else {
-				*w = props->size;
-				*h = props->size;
+				*outw = props->size;
+				*outh = props->size;
 			}
 			break;
 		default:
@@ -81,7 +80,8 @@ static void *gen_thumbnail(void *arg)
 	int w, h;
 	struct thumbnail_data *td = (struct thumbnail_data*)arg;
 	Epeg_Image *input = epeg_memory_open(td->instream, td->insize);
-	get_thumbnail_dims(input, td->props, &w, &h);
+	epeg_size_get(input, &w, &h);
+	get_thumbnail_dims(td->props, w, h, &w, &h);
 	sprintf(td->outname, "%s-%dx%d.jpg", td->inbasename, w, h);
 	epeg_decode_size_set(input, w, h);
 	epeg_quality_set(input, td->props->quality);
