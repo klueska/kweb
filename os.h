@@ -42,35 +42,27 @@ static inline long futex_wake(int *addr, int count)
 
 #define KWEB_STACK_SZ (PTHREAD_STACK_MIN * 4)
 
-#if defined(WITH_PARLIB) /* linux with parlib */
+/* For all variants except the linux custom-sched. */
+#if !defined(WITH_CUSTOM_SCHED)
+#define mutex_lock(x) pthread_mutex_lock(x)
+#define mutex_unlock(x) pthread_mutex_unlock(x)
+#define mutex_init(x) pthread_mutex_init(x, 0)
+#define mutex_t pthread_mutex_t
+#endif
+
+/* For all variants of linux with parlib */
+#if defined(WITH_PARLIB)
 #include <parlib/spinlock.h>
 
-#if defined(WITH_UPTHREAD) /* linux with upthread scheduler */
-#include <upthread/futex.h>
-#include <upthread/upthread.h>
-
-#define pthread_t upthread_t
-#define pthread_attr_t upthread_attr_t
-#define pthread_mutexattr_t upthread_mutexattr_t
-
-#define pthread_attr_init upthread_attr_init
-#define pthread_attr_setstacksize upthread_attr_setstacksize
-#define pthread_attr_setdetachstate upthread_attr_setdetachstate
-#define pthread_create upthread_create
-#define pthread_yield upthread_yield
-
-#define mutex_lock(x) upthread_mutex_lock(x)
-#define mutex_unlock(x) upthread_mutex_unlock(x)
-#define mutex_init(x) upthread_mutex_init(x, 0)
-#define mutex_t upthread_mutex_t
-
-#elif defined(WITH_CUSTOM_SCHED) /* linux with custom scheduler */
+/* For just the custom scheduler */
+#if defined(WITH_CUSTOM_SCHED)
 #include "bcq.h"
 #include "custom_sched.h"
 #define udelay usleep
 #endif
 
-#else /* native linux */
+/* For native linux. */
+#else
 
 #include "spinlock.h"
 #include <linux/futex.h>
@@ -80,11 +72,6 @@ static inline long futex_wake(int *addr, int count)
 #include <sched.h>
 #include <limits.h>
 #include <sys/epoll.h>
-
-#define mutex_lock(x) pthread_mutex_lock(x)
-#define mutex_unlock(x) pthread_mutex_unlock(x)
-#define mutex_init(x) pthread_mutex_init(x, 0)
-#define mutex_t pthread_mutex_t
 
 static inline long futex_wait(int *addr, int val)
 {
