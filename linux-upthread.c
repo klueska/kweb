@@ -15,9 +15,11 @@ void os_init()
   extern struct server_stats server_stats;
   extern int tpool_size;
 
+#ifndef WITH_LITHE
   upthread_can_vcore_request(false);
   upthread_can_vcore_steal(true);
   upthread_set_num_vcores(32);
+#endif
 
   kqueue_init(&kqueue, sizeof(struct http_connection));
   tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);

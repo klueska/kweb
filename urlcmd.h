@@ -28,23 +28,29 @@ bool intercept_request(struct intercept_buf *ib,
 
 
 /* Individual commands to run */
-void start_measurements  (struct intercept_buf *ib,
-                          struct query_params *params,
-                          struct http_request *r);
-void stop_measurements   (struct intercept_buf *ib,
-                          struct query_params *params,
-                          struct http_request *r);
-void add_vcores          (struct intercept_buf *ib,
-                          struct query_params *params,
-                          struct http_request *r);
-void yield_pcores        (struct intercept_buf *ib,
-                          struct query_params *params,
-                          struct http_request *r);
-void terminate           (struct intercept_buf *ib,
-                          struct query_params *params,
-                          struct http_request *r);
-void generate_thumbnails (struct intercept_buf *ib,
-                          struct query_params *params,
-                          struct http_request *r);
+void start_measurements           (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
+void stop_measurements            (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
+void add_vcores                   (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
+void yield_pcores                 (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
+void terminate                    (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
+void generate_thumbnails_serial   (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
+void generate_thumbnails_pthreads (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
+void generate_thumbnails_lithe    (struct intercept_buf *ib,
+                                   struct query_params *params,
+                                   struct http_request *r);
 
 #endif // URLCMD_H 

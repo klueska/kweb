@@ -12,6 +12,11 @@
 #include <assert.h>
 #include "thumbnails.h"
 
+#ifdef WITH_LITHE
+#include <lithe/lithe.h>
+#include <lithe/fork_join_sched.h>
+#endif
+
 struct thumbnail_props {
 	int size;
 	int type;	
@@ -85,6 +90,48 @@ static void *gen_thumbnail(void *arg)
 	epeg_close(input);
 }
 
+static int gen_thumbnails_serial(struct thumbnail_data *td)
+{
+	for (int i=0; i < num_thumbnails; i++) {
+		gen_thumbnail(&td[i]);
+	}
+	return 0;
+}
+
+static int gen_thumbnails_pthread(struct thumbnail_data *td)
+{
+	pthread_t threads[num_thumbnails];
+	for (int i=0; i < num_thumbnails; i++) {
+		pthread_create(&threads[i], NULL, gen_thumbnail, &td[i]);
+	}
+	for (int i=0; i < num_thumbnails; i++) {
+		pthread_join(threads[i], NULL);
+	}
+	return 0;
+}
+
+static int gen_thumbnails_lithe_fork_join(struct thumbnail_data *td)
+{
+	#ifndef WITH_LITHE
+		char *str = "Sorry, lithe is not supported in this configuration!";
+		td->outsize = strlen(str);
+		td->outstream = malloc(td->outsize + 1);
+		sprintf(td->outstream, "%s", str);
+		return -1;
+	#else
+		lithe_fork_join_sched_t *sched = lithe_fork_join_sched_create();
+		lithe_sched_enter(&sched->sched);
+		for (int i=0; i < num_thumbnails; i++) {
+			void *func = gen_thumbnail;
+			lithe_fork_join_context_create(sched, 10*PGSIZE, func, &td[i]);
+		}
+		lithe_fork_join_sched_join_all(sched);
+		lithe_sched_exit();
+		lithe_fork_join_sched_destroy(sched);
+		return 0;
+	#endif
+}
+
 static ssize_t archive_memory_write(struct archive *a, void *__data,
                                     const void *buff, size_t length)
 {
@@ -136,10 +183,10 @@ void *write_archive(struct thumbnails_file_data *indata,
 }
 
 void archive_thumbnails(struct thumbnails_file_data *indata,
-                        struct thumbnails_file_data *outdata)
+                        struct thumbnails_file_data *outdata,
+                        int method)
 {
 	struct thumbnail_data td[num_thumbnails];
-	pthread_t threads[num_thumbnails];
 
 	/* Create new string to hold the basefilename from the intpufilename. */
 	int len = 0;
@@ -153,7 +200,13 @@ void archive_thumbnails(struct thumbnails_file_data *indata,
 	memcpy(inbasename, indata->filename, len);
 	inbasename[len] = '\0';
 
+	/* Set the outfilename */
+	outdata->filename = malloc(strlen(inbasename) +
+	                           strlen("-thumbnails.tgz") + 1);
+	sprintf(outdata->filename, "%s-%s", inbasename, "thumbnails.tgz");
+
 	/* Create the thumbnails. */
+	int ret = 0;
 	for (int i = 0; i < num_thumbnails; i++) {
 		td[i].inbasename = inbasename;
 		td[i].instream = indata->stream;
@@ -161,19 +214,30 @@ void archive_thumbnails(struct thumbnails_file_data *indata,
 		td[i].outstream = NULL;
 		td[i].outsize = 0;
 		td[i].props = &thumbnail_props[i];
-		pthread_create(&threads[i], NULL, gen_thumbnail, &td[i]);
 	}
-	for (int i = 0; i < num_thumbnails; i++) {
-		pthread_join(threads[i], NULL);
+	switch (method) {
+		case THUMBNAILS_SERIAL:
+			ret = gen_thumbnails_serial(td);
+			break;
+		case THUMBNAILS_PTHREADS:
+			ret = gen_thumbnails_pthread(td);
+			break;
+		case THUMBNAILS_LITHE_FORK_JOIN:
+			ret = gen_thumbnails_lithe_fork_join(td);
+			break;
 	}
 
-	/* Write out an archive of all the thumbnails to a file. */
-	outdata->filename = malloc(strlen(inbasename) +
-                               strlen("-thumbnails.tgz") + 1);
-	sprintf(outdata->filename, "%s-%s", inbasename, "thumbnails.tgz");
-	write_archive(indata, outdata, td);
+	/* If there was an error. Assume the output buffer is set in the first td
+	 * element's outstream. */
+	if (ret < 0) {
+		outdata->stream = td->outstream;
+		outdata->size = td->outsize;
+	/* Otherwise, write out an archive of all the thumbnails to a file. */
+	} else {
+		write_archive(indata, outdata, td);
+	}
 
-	/* Free the basefilname. */
+	/* Free the basefilename. */
 	free(inbasename);
 }
 

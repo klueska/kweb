@@ -36,7 +36,14 @@ static struct url_cmd get_cmds[] = {
 	{"terminate",          terminate,          true, "text/html"}
 };
 static struct url_cmd put_cmds[] = {
-	{"generate_thumbnails", generate_thumbnails, false, "application/x-compressed"},
+	{"generate_thumbnails_serial",   generate_thumbnails_serial,   false, "application/x-compressed"},
+	{"generate_thumbnails_pthreads", generate_thumbnails_pthreads, false, "application/x-compressed"},
+#ifdef WITH_LITHE
+	{"generate_thumbnails_lithe",    generate_thumbnails_lithe,    false, "application/x-compressed"},
+#else
+	{"generate_thumbnails_lithe",    generate_thumbnails_lithe,    true, "text/html"},
+#endif
+
 };
 
 /* Find the beginning of the query string, or the end of the url */
@@ -276,11 +283,12 @@ void terminate(struct intercept_buf *ib,
 	sig_int(SIGINT);
 }
 
-void generate_thumbnails (struct intercept_buf *ib,
-                          struct query_params *params,
-                          struct http_request *r)
+static void generate_thumbnails(struct intercept_buf *ib,
+                                struct query_params *params,
+                                struct http_request *r,
+                                int method)
 {
-#ifndef __akaros__
+#if !defined(__akaros__) && !defined(WITH_CUSTOM_SCHED)
 	struct thumbnails_file_data indata, outdata;
 	char *default_filename = "";
 
@@ -298,10 +306,31 @@ void generate_thumbnails (struct intercept_buf *ib,
 	indata.stream = &r->buf[r->header_length];
 	indata.size = r->length - r->header_length;
 	indata.capacity = indata.size;
-	archive_thumbnails(&indata, &outdata);
+	archive_thumbnails(&indata, &outdata, method);
 	free(outdata.filename);
 	ib->buf = outdata.stream;
 	ib->size = outdata.size;
 #endif
+}
+
+void generate_thumbnails_serial(struct intercept_buf *ib,
+                                struct query_params *params,
+                                struct http_request *r)
+{
+	generate_thumbnails(ib, params, r, THUMBNAILS_SERIAL);
+}
+
+void generate_thumbnails_pthreads(struct intercept_buf *ib,
+                                  struct query_params *params,
+                                  struct http_request *r)
+{
+	generate_thumbnails(ib, params, r, THUMBNAILS_PTHREADS);
+}
+
+void generate_thumbnails_lithe(struct intercept_buf *ib,
+                               struct query_params *params,
+                               struct http_request *r)
+{
+	generate_thumbnails(ib, params, r, THUMBNAILS_LITHE_FORK_JOIN);
 }
 
