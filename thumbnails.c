@@ -9,7 +9,9 @@
 #include <errno.h>
 #include <pthread.h>
 #include <Epeg.h>
+#include <magick/api.h>
 #include <assert.h>
+#include <parlib/timing.h>
 #include "thumbnails.h"
 
 #ifdef WITH_LITHE
@@ -40,10 +42,10 @@ static struct thumbnail_props thumbnail_props[] = {
 
 struct thumbnail_data {
 	char *inbasename;
-	unsigned char *instream;
-	int insize;
-	unsigned char *outstream;
-	int outsize;
+	char *instream;
+	size_t insize;
+	char *outstream;
+	size_t outsize;
 	struct thumbnail_props *props;
 	char outname[256];
 };
@@ -79,22 +81,44 @@ static void *gen_thumbnail(void *arg)
 {
 	int w, h;
 	struct thumbnail_data *td = (struct thumbnail_data*)arg;
-	Epeg_Image *input = epeg_memory_open(td->instream, td->insize);
-	epeg_size_get(input, &w, &h);
-	get_thumbnail_dims(td->props, w, h, &w, &h);
+	ExceptionInfo excp;
+	GetExceptionInfo(&excp);
+	ImageInfo *inimg_info = CloneImageInfo((ImageInfo *) NULL);
+	ImageInfo *outimg_info = CloneImageInfo((ImageInfo *) NULL);
+	Image *inimg = BlobToImage(inimg_info, td->instream, td->insize, &excp);
+	get_thumbnail_dims(td->props, inimg->columns, inimg->rows, &w, &h);
+
 	sprintf(td->outname, "%s-%dx%d.jpg", td->inbasename, w, h);
-	epeg_decode_size_set(input, w, h);
-	epeg_quality_set(input, td->props->quality);
-	epeg_memory_output_set(input, &td->outstream, &td->outsize);
-	epeg_encode(input);
-	epeg_close(input);
+	Image *outimg = ThumbnailImage(inimg, w, h, &excp);
+	td->outstream = ImageToBlob(outimg_info, outimg, &td->outsize, &excp);
+
+	DestroyExceptionInfo(&excp);
+	DestroyImage(inimg);
+	DestroyImage(outimg);
+	DestroyImageInfo(inimg_info);
+	DestroyImageInfo(outimg_info);
 }
 
 static int gen_thumbnails_serial(struct thumbnail_data *td)
 {
+	int w, h;
+	ExceptionInfo excp;
+	ImageInfo img_info;
+	GetExceptionInfo(&excp);
+	GetImageInfo(&img_info);
+	Image *inimg = BlobToImage(&img_info, td->instream, td->insize, &excp);
+
 	for (int i=0; i < num_thumbnails; i++) {
-		gen_thumbnail(&td[i]);
+		GetImageInfo(&img_info);
+		get_thumbnail_dims(td[i].props, inimg->columns, inimg->rows, &w, &h);
+		sprintf(td[i].outname, "%s-%dx%d.jpg", td[i].inbasename, w, h);
+		Image *outimg = ThumbnailImage(inimg, w, h, &excp);
+		td[i].outstream = ImageToBlob(&img_info, outimg, &td[i].outsize, &excp);
+		DestroyImage(outimg);
 	}
+
+	DestroyExceptionInfo(&excp);
+	DestroyImage(inimg);
 	return 0;
 }
 

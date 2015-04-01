@@ -1,10 +1,10 @@
 COMMON_FILES = kweb.c kqueue.c cpu_util.c urlcmd.c
 NON_CUSTOM_SCHED_FILES = $(COMMON_FILES) tpool.c kstats.c ktimer.c 
 THUMBNAIL_FILES = thumbnails.c
-THUMBNAIL_LIBS = -lepeg -larchive
-THUMBNAIL_DIRS =
+THUMBNAIL_LIBS = -fopenmp -lGraphicsMagick -larchive
+THUMBNAIL_DIRS = -I/usr/include/GraphicsMagick
 
-LINUX_NATIVE_FILES = linux.c $(THUMBNAIL_FILES) $(NON_CUSTOM_SCHED_FILES)
+LINUX_NATIVE_FILES = linux.c native-timing.c $(THUMBNAIL_FILES) $(NON_CUSTOM_SCHED_FILES)
 LINUX_UPTHREAD_FILES = linux-upthread.c $(THUMBNAIL_FILES) $(NON_CUSTOM_SCHED_FILES)
 LINUX_CUSTOM_SCHED_FILES = linux-custom-sched.c $(COMMON_FILES)
 AKAROS_FILES = akaros.c $(NON_CUSTOM_SCHED_FILES)

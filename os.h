@@ -39,6 +39,7 @@ static inline long futex_wake(int *addr, int count)
 #elif defined(__linux__)
 #include <unistd.h>
 #include <limits.h>
+#include <magick/api.h>
 
 #define KWEB_STACK_SZ (PTHREAD_STACK_MIN * 4)
 

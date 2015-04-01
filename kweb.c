@@ -451,6 +451,7 @@ int main(int argc, char **argv)
   static struct sockaddr_in cli_addr; /* static = initialised to zeros */
   static struct sockaddr_in serv_addr; /* static = initialised to zeros */
 
+  InitializeMagick(*argv);
   /* Verify proper number of args and print usage if invalid */
   if( argc < 3  || argc > 4 || !strcmp(argv[1], "-?") ) {
     printf(""
@@ -579,6 +580,7 @@ void sig_int(int signo)
     cpu_util_fini(&cpu_util);
     close(listenfd);
     kstats_print_lifetime_statistics(&kstats);
+    /* DestroyMagick(); */
     printf("Server Terminated\n");
     exit(0);
   }
