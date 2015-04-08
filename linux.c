@@ -7,6 +7,15 @@
 #include "kstats.h"
 #include "cpu_util.h"
 
+static int max_cpus = -1;
+static cpu_set_t thread_cpuset;
+
+static void pin_to_cores()
+{
+  sched_setaffinity(0, sizeof(cpu_set_t), &thread_cpuset);
+  sched_yield();
+}
+
 void os_init(void)
 {
   extern struct tpool tpool;
@@ -16,27 +25,32 @@ void os_init(void)
   extern struct server_stats server_stats;
   extern int tpool_size;
 
+  /* Update max_cpus if passed in through the environment. */
+  const char *max_cpus_string = getenv("VCORE_LIMIT");
+  if (max_cpus_string != NULL)
+    max_cpus = atoi(max_cpus_string);
+  else
+    max_cpus = get_nprocs();
+
+  /* Setup the cpu_set mask to reflect this value. */
+  CPU_ZERO(&thread_cpuset);
+  for (int i=0; i<max_cpus; i++)
+    CPU_SET(i, &thread_cpuset);
+
+  /* And pin the main thread to these cores. */
+  pin_to_cores();
+
+  /* Set up kweb itself. */
   kqueue_init(&kqueue, sizeof(struct http_connection));
   tpool_init(&tpool, tpool_size, &kqueue, http_server, KWEB_STACK_SZ);
   cpu_util_init(&cpu_util);
   kstats_init(&kstats, &kqueue, &tpool, &cpu_util);
-}
 
-static void pin_to_core(int core)
-{
-  cpu_set_t c;
-  CPU_ZERO(&c);
-  CPU_SET(core, &c);
-  sched_setaffinity(0, sizeof(cpu_set_t), &c);
-  sched_yield();
 }
 
 void os_thread_init()
 {
-//  static int next_core = 0;
-//  int n = __sync_fetch_and_add(&next_core, 1);
-//  printf("next_core: %d\n", n % get_nprocs());
-//  pin_to_core(n % get_nprocs());
+  pin_to_cores();
 }
 
 static int make_socket_non_blocking(int sfd)
