@@ -253,8 +253,8 @@ static void maybe_destroy_connection(struct kqueue *q,
      * point in the code, we don't really have that info.  could just blindly
      * hang-up.  best though is to track in *c whether or not the client closed
      * it or something. */
-    close(c->socketfd);
     destroy_connection(c);
+    close(c->socketfd);
     kqueue_destroy_item(q, &c->conn);
   }
 }
