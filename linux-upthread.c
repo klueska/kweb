@@ -16,9 +16,9 @@ void os_init()
   extern int tpool_size;
 
 #ifndef WITH_LITHE
-  upthread_can_vcore_request(false);
-  upthread_can_vcore_steal(true);
-  upthread_set_num_vcores(32);
+//  upthread_can_vcore_request(false);
+//  upthread_can_vcore_steal(true);
+//  upthread_set_num_vcores(32);
 #endif
 
   kqueue_init(&kqueue, sizeof(struct http_connection));
